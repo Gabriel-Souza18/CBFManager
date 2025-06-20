@@ -16,7 +16,7 @@ As principais entidades gerenciadas no sistema são:
 ## 🏗️ Tecnologias Utilizadas  
 - **Python** 🐍  
 - **Streamlit** 🎨 (Interface Web)  
-- **MongoDB** 🗄️ (Banco de Dados NoSQL)  
+- **MySQL** 🗄️ (Banco de Dados SQL)  
 - **Pymongo** 🔗 (Integração com MongoDB)  
 
 ## 📂 Estrutura do Projeto  
@@ -26,7 +26,7 @@ CBFManager/
 │── requirements.txt        # Dependências do projeto
 │── config.py               # Configuração do MongoDB
 │── database/
-│   │── connection.py       # Conexão com MongoDB
+│   │── connection.py       # Conexão com MySQL
 │   │── models.py           # Modelos das entidades
 │── modules/
 │   │── jogadores.py        # Gerenciamento de jogadores
@@ -35,7 +35,11 @@ CBFManager/
 │   │── estatisticas.py     # Gerenciamento de estatísticas
 │   │── pessoas.py         # Gerenciamento de usuários
 ```
-
+## Para os testes enquanto mudamos pra MySQl
+- Instalar MySQL e os requirements.txt <br>
+- abra o MySQL
+- roda o init_db.py
+- depois o Preencher_BD.py
 ## 🚀 Como Executar  
 1 - Clone o repositório:  
 ```bash
