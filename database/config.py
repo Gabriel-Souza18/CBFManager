@@ -9,6 +9,6 @@ MYSQL_HOST = os.getenv("MYSQL_HOST")
 MYSQL_DB = os.getenv("MYSQL_DB")
 
 MYSQL_URI = (
-    f"mysql+mysqlconnector://"
+    f"mysql+pymysql://"
     f"{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}/{MYSQL_DB}"
 )

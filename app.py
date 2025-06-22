@@ -1,16 +1,14 @@
 import streamlit as st
+from modules import pessoas, jogadores, equipes, jogos, estatisticas
+from database.connection import get_db
+from database.models import Pessoa 
 
 st.set_page_config(page_title="CBF Manager", page_icon="./assets/CBF.png")
 
-from modules import pessoas, jogadores, equipes, jogos, estatisticas
-from database.connection import get_db
-from database.models import get_collections
 
 
-with st.spinner("Conectando ao banco de dados..."):
-    db = get_db()
-    collections = get_collections(db)
-    pessoas_collection = db["pessoas"]
+session_generator = get_db()
+session = next(session_generator) 
 
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -25,11 +23,12 @@ if not st.session_state.logado:
 
     if st.button("Entrar"):
         with st.spinner("Verificando credenciais..."):
-            pessoa = pessoas_collection.find_one({"login": login, "senha": senha})
+            
+            pessoa = session.query(Pessoa).filter_by(login=login, senha=senha).first()
         if pessoa:
-            st.success(f"✅ Bem-vindo, {pessoa['login']}!")
+            st.success(f"✅ Bem-vindo, {pessoa.login}!") 
             st.session_state.logado = True
-            st.session_state.pessoa = pessoa
+            st.session_state.pessoa = {"login": pessoa.login, "tipo": pessoa.tipo} 
             st.rerun()
         else:
             st.error("🚫 Login ou senha inválidos")
@@ -64,25 +63,25 @@ else:
         )
 
         if page == "Cadastrar Pessoa":
-            pessoas.cadastrar_pessoa()
+            pessoas.cadastrar_pessoa(session) 
         elif page == "Deletar Pessoa":
-            pessoas.deletar_pessoa()
+            pessoas.deletar_pessoa(session)
         elif page == "Cadastrar Jogador":
-            jogadores.cadastrar_jogador()
+            jogadores.cadastrar_jogador(session)
         elif page == "Deletar Jogador":
-            jogadores.deletar_jogador()
+            jogadores.deletar_jogador(session)
         elif page == "Cadastrar Equipe":
-            equipes.cadastrar_equipe()
+            equipes.cadastrar_equipe(session)
         elif page == "Deletar Equipe":
-            equipes.deletar_equipe()
+            equipes.deletar_equipe(session)
         elif page == "Cadastrar Jogo":
-            jogos.cadastrar_jogo()
+            jogos.cadastrar_jogo(session)
         elif page == "Deletar Jogo":
-            jogos.deletar_jogo()
+            jogos.deletar_jogo(session)
         elif page == "Cadastrar Estatísticas":
-            estatisticas.cadastrar_estatisticas()
+            estatisticas.cadastrar_estatisticas(session)
         elif page == "Deletar Estatísticas":
-            estatisticas.deletar_estatisticas()
+            estatisticas.deletar_estatisticas(session)
 
     elif st.session_state.pessoa["tipo"] == "usuario":
         page = st.sidebar.selectbox(
@@ -96,10 +95,10 @@ else:
         )
 
         if page == "Visualizar Jogadores":
-            jogadores.visualizar_jogador()
+            jogadores.visualizar_jogador(session)
         elif page == "Visualizar Equipes":
-            equipes.visualizar_equipe()
+            equipes.visualizar_equipe(session)
         elif page == "Visualizar Jogos":
-            jogos.visualizar_jogo()
+            jogos.visualizar_jogo(session)
         elif page == "Visualizar Estatísticas":
-            estatisticas.visualizar_estatisticas()
+            estatisticas.visualizar_estatisticas(session)

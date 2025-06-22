@@ -7,8 +7,8 @@ session = next(get_db())
 
 def cadastrar_pessoas():
     lista = [
-        {"login": "admin", "senha": "123"},
-        {"login": "user",  "senha": "123"},
+        {"login": "admin", "senha": "123", "tipo": "administrador"},
+        {"login": "user",  "senha": "123", "tipo": "usuario"},
     ]
     for p in lista:
         existe = session.query(Pessoa).filter_by(login=p["login"]).first()
