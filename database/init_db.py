@@ -1,14 +1,14 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from sqlalchemy import create_engine, text
 from database.config import MYSQL_USER, MYSQL_PASSWORD, MYSQL_HOST, MYSQL_DB
 from database.connection import engine
 from database.models import Base
 
 def main():
-    """
-    Initializes the database.
-    1. Creates the database if it does not exist.
-    2. Creates all the tables based on the models.
-    """
+
     print("--- Database Setup Initialized ---")
     server_uri = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}"
     server_engine = create_engine(server_uri, echo=False)
