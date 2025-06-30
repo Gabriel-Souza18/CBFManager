@@ -1,5 +1,5 @@
 import streamlit as st
-from modules import pessoas, jogadores, equipes, jogos, estatisticas
+from modules import pessoas, jogadores, equipes, jogos, estatisticas, consultas
 from database.connection import get_db
 from database.models import Pessoa 
 
@@ -59,6 +59,7 @@ else:
                 "Deletar Jogo",
                 "Cadastrar Estatísticas",
                 "Deletar Estatísticas",
+                "Consulta SQL"
             ],
         )
 
@@ -82,6 +83,8 @@ else:
             estatisticas.cadastrar_estatisticas(session)
         elif page == "Deletar Estatísticas":
             estatisticas.deletar_estatisticas(session)
+        elif page == "Consulta SQL":
+            consultas.consultar(session)
 
     elif st.session_state.pessoa["tipo"] == "usuario":
         page = st.sidebar.selectbox(
