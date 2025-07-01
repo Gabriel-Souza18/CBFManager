@@ -28,10 +28,25 @@ def consultar(session):
             "SELECT j.nome, SUM(est.gols) as total_gols FROM jogador j LEFT JOIN estatistica est ON j.id = est.jogador_id GROUP BY j.nome HAVING total_gols > 0;",
             "SELECT jg.data, eq1.nome as equipe1, eq2.nome as equipe2 FROM jogo jg JOIN equipe eq1 ON jg.equipe1_id = eq1.nome JOIN equipe eq2 ON jg.equipe2_id = eq2.nome;"
         ]
+        exemplo_explicacao = [
+            "Buscar tudo de todos os Jogadores",
+            "Buscar nome, número dos jogadores do Flamengo",
+            "Contar número de jogadores",
+            "Mostrar nome e quantidade de jogadores em cada equipe",
+            "Mostrar estatísticas de gols de todos os jogadores que já fizeram gols",
+            "Buscar jogos e mostrar a data e as duas equipes que participaram"
+        ]
         
-        for i, exemplo in enumerate(exemplos, 1):
-            if st.button(f"Usar Exemplo {i}", key=f"exemplo_{i}"):
-                st.session_state.query_sql = exemplo
+        for i, (exemplo, explicacao) in enumerate(zip(exemplos, exemplo_explicacao), 1):
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                if st.button(f"Usar Exemplo {i}", key=f"exemplo_{i}"):
+                    st.session_state.query_sql = exemplo
+            
+            with col2:
+                st.write(f"**{explicacao}**")
+                st.code(exemplo, language="sql")
     
     # Input da consulta SQL
     query_sql = st.text_area(
