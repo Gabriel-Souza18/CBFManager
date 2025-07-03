@@ -141,3 +141,61 @@ def visualizar_estatisticas(session):
         st.table(dados_tabela)
     else:
         st.info("Nenhuma estatística registrada ainda.")
+        
+
+def editar_estatisticas(session):
+    st.header("Editar Estatística de Jogador")
+
+    with st.spinner("Carregando estatísticas..."):
+        estatisticas = list(session.query(Estatistica).all())
+
+    if not estatisticas:
+        st.info("Nenhuma estatística registrada ainda.")
+        return
+
+    # Criar opções para o selectbox com informações completas
+    opcoes = []
+    for estat in estatisticas:
+        # Buscar informações do jogador e jogo
+        jogador = session.query(Jogador).filter_by(id=estat.jogador_id).first()
+        jogo = session.query(Jogo).filter_by(id=estat.jogo_id).first()
+
+        jogador_nome = jogador.nome if jogador else "Jogador Desconhecido"
+        jogo_info = f"{jogo.data} - {jogo.local}" if jogo else "Jogo Desconhecido"
+
+        opcao_label = f"{jogador_nome} - {jogo_info} (Gols: {estat.gols}, Cartões: {estat.cartoes}) - ID: {estat.id}"
+        opcoes.append(opcao_label)
+
+    estatistica_selecionada = st.selectbox("Escolha a estatística para editar:", opcoes)
+    
+    # Extrair o ID da estatística selecionada
+    estat_id_str = estatistica_selecionada.split("ID: ")[1].strip()
+    estat_id = int(estat_id_str)
+    
+    # Buscar a estatística pelo ID
+    estatistica = session.query(Estatistica).filter_by(id=estat_id).first()
+
+    if not estatistica:
+        st.error("Estatística não encontrada.")
+        return
+
+    # Campos de edição com valores atuais
+    gols = st.number_input("Gols Marcados:", min_value=0, value=estatistica.gols or 0, step=1)
+    cartoes = st.number_input("Cartões Recebidos:", min_value=0, value=estatistica.cartoes or 0, step=1)
+
+    if st.button("Salvar Alterações"):
+        try:
+            with st.spinner("Atualizando estatística..."):
+                # Atualizar a estatística
+                session.query(Estatistica).filter_by(id=estat_id).update({
+                    "gols": gols,
+                    "cartoes": cartoes
+                })
+                session.commit()
+                
+            st.success("Estatística atualizada com sucesso!")
+            st.rerun()
+            
+        except Exception as e:
+            session.rollback()
+            st.error(f"Erro ao atualizar estatística: {e}")

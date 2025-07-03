@@ -118,3 +118,77 @@ def visualizar_jogo(session):
         st.table(dados_tabela)
     else:
         st.info("Nenhum jogo cadastrado ainda.")
+        
+def editar_jogo(session):
+    st.header("Editar Jogo")
+    st.subheader("Editar um jogo irá deletar todas as estatísticas relacionadas ao mesmo")
+
+    with st.spinner("Carregando jogos..."):
+        jogos = list(session.query(Jogo).all())
+
+    if not jogos:
+        st.info("Nenhum jogo cadastrado ainda.")
+        return
+
+    # Criar opções para o selectbox
+    opcoes_jogos = [
+        f"{j.data} {j.hora} - {j.local} | {j.equipe1_id} vs {j.equipe2_id} (ID: {j.id})"
+        for j in jogos
+    ]
+
+    jogo_selecionado = st.selectbox("Selecione o jogo para editar:", opcoes_jogos)
+    
+    # Extrair o ID do jogo selecionado
+    jogo_id_str = jogo_selecionado.split("(ID: ")[1].strip(")")
+    jogo_id = int(jogo_id_str)
+    
+    # Buscar o jogo pelo ID
+    jogo = session.query(Jogo).filter_by(id=jogo_id).first()
+
+    if not jogo:
+        st.error("Jogo não encontrado.")
+        return
+
+    # Campos de edição com valores atuais
+    data_jogo = st.date_input("Data do Jogo:", value=jogo.data)
+    hora_jogo = st.time_input("Hora do Jogo:", value=jogo.hora)
+    local_jogo = st.text_input("Local do Jogo:", value=jogo.local)
+
+    # Carregar equipes para os selectboxes
+    with st.spinner("Carregando equipes..."):
+        equipes = list(session.query(Equipe).all())
+    
+    nomes_equipes = [e.nome for e in equipes]
+
+    equipe1_index = nomes_equipes.index(jogo.equipe1_id) if jogo.equipe1_id in nomes_equipes else 0
+    equipe2_index = nomes_equipes.index(jogo.equipe2_id) if jogo.equipe2_id in nomes_equipes else 0
+
+    equipe1 = st.selectbox("Equipe 1:", nomes_equipes, index=equipe1_index)
+    equipe2 = st.selectbox("Equipe 2:", nomes_equipes, index=equipe2_index)
+
+    if equipe1 == equipe2:
+        st.error("A Equipe 1 e a Equipe 2 não podem ser a mesma.")
+        return
+
+    if st.button("Salvar Alterações"):
+        try:
+            with st.spinner("Atualizando jogo..."):
+                # Deletar estatísticas relacionadas (CASCADE)
+                session.query(Estatistica).filter_by(jogo_id=jogo_id).delete()
+                
+                # Atualizar o jogo
+                session.query(Jogo).filter_by(id=jogo_id).update({
+                    "data": data_jogo,
+                    "hora": hora_jogo,
+                    "local": local_jogo,
+                    "equipe1_id": equipe1,
+                    "equipe2_id": equipe2,
+                })
+                session.commit()
+                
+            st.success("Jogo atualizado e estatísticas relacionadas deletadas com sucesso!")
+            st.rerun()
+            
+        except Exception as e:
+            session.rollback()
+            st.error(f"Erro ao atualizar jogo: {e}")

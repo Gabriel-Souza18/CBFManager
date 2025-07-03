@@ -6,7 +6,6 @@ from database.models import Pessoa
 st.set_page_config(page_title="CBF Manager", page_icon="./assets/CBF.png")
 
 
-
 session_generator = get_db()
 session = next(session_generator) 
 
@@ -53,12 +52,15 @@ else:
                 "Deletar Pessoa",
                 "Cadastrar Jogador",
                 "Deletar Jogador",
+                "Editar Jogador",
                 "Cadastrar Equipe",
                 "Deletar Equipe",
                 "Cadastrar Jogo",
                 "Deletar Jogo",
+                "Editar Jogo"
                 "Cadastrar Estatísticas",
                 "Deletar Estatísticas",
+                "Editar Estatisticas",
                 "Consulta SQL"
             ],
         )
@@ -85,6 +87,13 @@ else:
             estatisticas.deletar_estatisticas(session)
         elif page == "Consulta SQL":
             consultas.consultar(session)
+        elif page == "Editar Jogador":
+            jogadores.editar_jogador(session)
+        elif page == "Editar Jogo":
+            jogos.editar_jogo(session)
+        elif page == "Editar Estatisticas":
+            estatisticas.editar_estatisticas(session)
+
 
     elif st.session_state.pessoa["tipo"] == "usuario":
         page = st.sidebar.selectbox(
