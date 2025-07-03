@@ -57,7 +57,7 @@ else:
                 "Deletar Equipe",
                 "Cadastrar Jogo",
                 "Deletar Jogo",
-                "Editar Jogo"
+                "Editar Jogo",
                 "Cadastrar Estatísticas",
                 "Deletar Estatísticas",
                 "Editar Estatisticas",

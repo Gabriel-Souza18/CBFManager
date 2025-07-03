@@ -1,0 +1,7 @@
+[theme]
+base="light"
+primaryColor="#4a9e19"
+backgroundColor="#dcffcd"
+secondaryBackgroundColor="#a9d49d"
+
+font = "Georgia"
