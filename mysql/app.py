@@ -1,10 +1,7 @@
-# app.py (versão completa atualizada)
 import streamlit as st
-from modules import pessoas, jogadores, equipes, jogos, estatisticas
 from database.connection import get_db
-from database.models import Pessoa 
+from mysql.connector import Error
 
-# Configuração da página
 st.set_page_config(
     page_title="⚽ CBF Manager",
     page_icon="./assets/CBF.png",
@@ -12,40 +9,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados
 st.markdown("""
     <style>
-        .css-18e3th9 { padding-top: 2rem; padding-bottom: 2rem; }
-        .css-1d391kg { padding-top: 3.5rem; }
-        .stButton>button { width: 100%; }
-        .stSelectbox>div>div { font-size: 1rem; }
-        .stTextInput>div>div>input { font-size: 1rem; }
-        .stDateInput>div>div>input { font-size: 1rem; }
-        .stTimeInput>div>div>input { font-size: 1rem; }
-        .css-1q1n0ol { font-size: 1.1rem; }
-        .css-10trblm { font-size: 1.8rem; }
-        .css-1v3fvcr { margin-bottom: 1rem; }
-        
-        /* Estilo para as abas */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 10px;
-        }
-        
-        .stTabs [data-baseweb="tab"] {
-            padding: 8px 16px;
-            border-radius: 4px 4px 0 0;
-        }
-        
-        .stTabs [aria-selected="true"] {
-            background-color: #f0f2f6;
-        }
+        /* Seus estilos CSS aqui */
     </style>
 """, unsafe_allow_html=True)
 
-session_generator = get_db()
-session = next(session_generator) 
-
-# Sistema de autenticação
 if "logado" not in st.session_state:
     st.session_state.logado = False
 if "pessoa" not in st.session_state:
@@ -61,21 +30,30 @@ if not st.session_state.logado:
             senha = st.text_input("Senha", type="password", key="senha_input")
             
             if st.button("Entrar", type="primary", use_container_width=True):
-                with st.spinner("Verificando credenciais..."):
-                    pessoa = session.query(Pessoa).filter_by(login=login, senha=senha).first()
-                if pessoa:
-                    st.success(f"✅ Bem-vindo, {pessoa.login}!") 
-                    st.session_state.logado = True
-                    st.session_state.pessoa = {
-                        "login": pessoa.login, 
-                        "tipo": pessoa.tipo,
-                        "current_page": None
-                    }
-                    st.rerun()
-                else:
-                    st.error("🚫 Login ou senha inválidos")
+                try:
+                    conn = get_db()
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute(
+                        "SELECT * FROM pessoas WHERE login = %s AND senha = %s",
+                        (login, senha)
+                    )
+                    pessoa = cursor.fetchone()
+                    cursor.close()
+                    
+                    if pessoa:
+                        st.success(f"✅ Bem-vindo, {pessoa['login']}!") 
+                        st.session_state.logado = True
+                        st.session_state.pessoa = {
+                            "login": pessoa['login'],
+                            "tipo": pessoa['tipo'],
+                            "current_page": None
+                        }
+                        st.rerun()
+                    else:
+                        st.error("🚫 Login ou senha inválidos")
+                except Error as e:
+                    st.error(f"Erro ao conectar ao banco de dados: {str(e)}")
 else:
-    # Barra lateral
     with st.sidebar:
         st.success(f"👤 Logado como: {st.session_state.pessoa['login']} ({st.session_state.pessoa['tipo']})")
         
@@ -108,81 +86,73 @@ else:
             ]
             page = st.selectbox("Selecione uma opção:", menu_opcoes)
 
-    # Conteúdo principal
     st.title("⚽ CBF Manager")
     
-    # Página inicial
-    if page == "🏠 Início" or page is None:
+    try:
+        conn = get_db()
+        
         if st.session_state.pessoa["tipo"] == "administrador":
-            st.subheader("Bem-vindo ao Painel Administrativo")
-            st.markdown("""
-                **Menu de Administração Completo**
+            if page == "👥 Usuários":
+                from modules import pessoas
+                tab1, tab2 = st.tabs(["Cadastrar", "Deletar"])
+                with tab1:
+                    pessoas.cadastrar_pessoa(conn)
+                with tab2:
+                    pessoas.deletar_pessoa(conn)
+                        
+            elif page == "👟 Jogadores":
+                from modules import jogadores
+                tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+                with tab1:
+                    jogadores.cadastrar_jogador(conn)
+                with tab2:
+                    jogadores.editar_jogador(conn)
+                with tab3:
+                    jogadores.deletar_jogador(conn)
+            elif page == "🏆 Equipes":
+                from modules import equipes
+                tab1, tab2 = st.tabs(["Cadastrar", "Deletar"])
+                with tab1:
+                    equipes.cadastrar_equipe(conn)
+                with tab2:
+                    equipes.deletar_equipe(conn)
                 
-                Selecione uma opção no menu lateral para gerenciar:
-                - 👥 Usuários do sistema
-                - 👟 Jogadores e suas informações
-                - 🏆 Equipes participantes
-                - ⚽ Jogos agendados
-                - 📊 Estatísticas de desempenho
-            """)
+            elif page == "⚽ Jogos":
+                from modules import jogos
+                tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+                with tab1:
+                    jogos.cadastrar_jogo(conn)
+                with tab2:
+                    jogos.editar_jogo(conn)
+                with tab3:
+                    jogos.deletar_jogo(conn)
+                
+            elif page == "📊 Estatísticas":
+                from modules import estatisticas
+                tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+                with tab1:
+                    estatisticas.cadastrar_estatisticas(conn)
+                with tab2:
+                    estatisticas.editar_estatisticas(conn)
+                with tab3:
+                    estatisticas.deletar_estatisticas(conn)
+        
         else:
-            st.subheader("Bem-vindo ao CBF Manager")
-            st.markdown("""
-                **Sistema de consulta de times e estatísticas de futebol**
+            if page == "👟 Visualizar Jogadores":
+                from modules import jogadores
+                jogadores.visualizar_jogador(conn)
+            elif page == "🏆 Visualizar Equipes":
+                from modules import equipes
+                equipes.visualizar_equipe(conn)
+            elif page == "⚽ Visualizar Jogos":
+                from modules import jogos
+                jogos.visualizar_jogo(conn)
+            elif page == "📊 Visualizar Estatísticas":
+                from modules import estatisticas
+                estatisticas.visualizar_estatisticas(conn)
                 
-                Utilize o menu lateral para acessar as informações disponíveis.
-            """)
-        st.image("./assets/soccer_field.jpeg", use_column_width=True)
-    
-    # Páginas do administrador
-    elif st.session_state.pessoa["tipo"] == "administrador":
-        if page == "👥 Usuários":
-            tab1, tab2 = st.tabs(["Cadastrar", "Deletar"])
-            with tab1:
-                pessoas.cadastrar_pessoa(session)
-            with tab2:
-                pessoas.deletar_pessoa(session)
-                    
-        elif page == "👟 Jogadores":
-            tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
-            with tab1:
-                jogadores.cadastrar_jogador(session)
-            with tab2:
-                jogadores.editar_jogador(session)
-            with tab3:
-                jogadores.deletar_jogador(session)
-        elif page == "🏆 Equipes":
-            tab1, tab2 = st.tabs(["Cadastrar", "Deletar"])
-            with tab1:
-                equipes.cadastrar_equipe(session)
-            with tab2:
-                equipes.deletar_equipe(session)
-            
-        elif page == "⚽ Jogos":
-            tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
-            with tab1:
-                jogos.cadastrar_jogo(session)
-            with tab2:
-                jogos.editar_jogo(session)
-            with tab3:
-                jogos.deletar_jogo(session)
-            
-        elif page == "📊 Estatísticas":
-            tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
-            with tab1:
-                estatisticas.cadastrar_estatisticas(session)
-            with tab2:
-                estatisticas.editar_estatisticas(session)
-            with tab3:
-                estatisticas.deletar_estatisticas(session)
-    
-    # Páginas do usuário
-    else:
-        if page == "👟 Visualizar Jogadores":
-            jogadores.visualizar_jogador(session)
-        elif page == "🏆 Visualizar Equipes":
-            equipes.visualizar_equipe(session)
-        elif page == "⚽ Visualizar Jogos":
-            jogos.visualizar_jogo(session)
-        elif page == "📊 Visualizar Estatísticas":
-            estatisticas.visualizar_estatisticas(session)
+    except Error as e:
+        st.error(f"Erro ao conectar ao banco de dados: {str(e)}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            conn.close()

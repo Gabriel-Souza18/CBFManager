@@ -1,76 +1,69 @@
 import streamlit as st
-from database.models import Jogador, Equipe, Estatistica 
-from sqlalchemy import func, text
+import mysql.connector
+import pandas as pd
 
-def validate_player_number(session, numero, nome_equipe):
-    existing = session.query(Jogador).filter_by(
-        numero=numero,
-        nome_equipe=nome_equipe
-    ).first()
-    return existing is None
+def validate_player_number(conn, numero, nome_equipe):
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id FROM jogador WHERE numero = %s AND nome_equipe = %s",
+        (numero, nome_equipe)
+    )
+    return not cursor.fetchone()
 
-def jogador_operations(session):
-    tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
-    
-    with tab1:
-        cadastrar_jogador(session)
-    
-    with tab2:
-        editar_jogador(session)
-    
-    with tab3:
-        deletar_jogador(session)
-
-def cadastrar_jogador(session):
+def cadastrar_jogador(conn):
     st.header("Cadastrar Jogador")
     
     with st.form("player_form"):
         nome = st.text_input("Nome:").strip()
         
-        equipes = session.query(Equipe).order_by(Equipe.nome).all()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT nome FROM equipe ORDER BY nome")
+        equipes = cursor.fetchall()
         equipe = st.selectbox(
             "Equipe:",
-            ["Nenhuma"] + [e.nome for e in equipes]
+            ["Nenhuma"] + [e['nome'] for e in equipes]
         )
         
         numero = st.number_input("Número:", min_value=1, max_value=99, step=1)
         
         submitted = st.form_submit_button("Cadastrar")
         if submitted:
+            cursor = conn.cursor()
             try:
                 if not nome:
                     st.error("Nome é obrigatório")
                     return
                     
-                if equipe != "Nenhuma" and not validate_player_number(session, numero, equipe):
+                if equipe != "Nenhuma" and not validate_player_number(conn, numero, equipe):
                     st.error(f"O número {numero} já está em uso nesta equipe.")
                     return
                     
-                new_player = Jogador(
-                    nome=nome,
-                    numero=numero,
-                    nome_equipe=equipe if equipe != "Nenhuma" else None
+                cursor.execute(
+                    "INSERT INTO jogador (nome, numero, nome_equipe) VALUES (%s, %s, %s)",
+                    (nome, numero, equipe if equipe != "Nenhuma" else None)
                 )
-                session.add(new_player)
-                session.commit()
+                conn.commit()
                 st.success("Jogador cadastrado com sucesso!")
                 st.rerun()
-            except Exception as e:
-                session.rollback()
+            except mysql.connector.Error as e:
+                conn.rollback()
                 st.error(f"Erro ao cadastrar jogador: {str(e)}")
+            finally:
+                cursor.close()
             
-def deletar_jogador(session):
+def deletar_jogador(conn):
     st.header("Deletar Jogador")
 
-    with st.spinner("Carregando jogadores..."):
-        jogadores = list(session.query(Jogador).all()) 
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, nome, numero, nome_equipe FROM jogador")
+    jogadores = cursor.fetchall()
 
     if not jogadores:
         st.info("Nenhum jogador cadastrado ainda.")
         return
 
     lista_jogadores = [
-        f"{j.nome} | Nº {j.numero} | {j.nome_equipe if j.nome_equipe else 'Nenhuma'} (ID: {j.id})"
+        f"{j['nome']} | Nº {j['numero']} | {j['nome_equipe'] if j['nome_equipe'] else 'Nenhuma'} (ID: {j['id']})"
         for j in jogadores
     ]
 
@@ -83,99 +76,107 @@ def deletar_jogador(session):
             jogador_id_str = jogador_selecionado.split("(ID: ")[1].strip(")")
             jogador_id = int(jogador_id_str) 
 
-            jogador_to_delete = session.query(Jogador).filter_by(id=jogador_id).first()
-            if jogador_to_delete:
-                with st.spinner("Deletando jogador e estatísticas relacionadas..."):
-                    session.delete(jogador_to_delete)
-                    session.commit()
-                st.success("Jogador e estatísticas relacionadas deletados com sucesso!")
-                st.rerun()
-            else:
-                st.error("Jogador não encontrado.")
-        except Exception as e:
-            session.rollback() 
+            cursor.execute("DELETE FROM jogador WHERE id = %s", (jogador_id,))
+            conn.commit()
+            st.success("Jogador e estatísticas relacionadas deletados com sucesso!")
+            st.rerun()
+        except mysql.connector.Error as e:
+            conn.rollback()
             st.error(f"Erro ao deletar jogador: {str(e)}")
+        finally:
+            cursor.close()
 
-def visualizar_jogador(session):
+def visualizar_jogador(conn):
     st.subheader("👟 Jogadores Cadastrados")
+    
+    cursor = conn.cursor(dictionary=True)
     
     col1, col2 = st.columns(2)
     with col1:
-        equipes = session.query(Equipe).order_by(Equipe.nome).all()
+        cursor.execute("SELECT nome FROM equipe ORDER BY nome")
+        equipes = cursor.fetchall()
         equipe_filtro = st.selectbox(
             "Filtrar por equipe:",
-            ["Todas"] + [e.nome for e in equipes]
+            ["Todas"] + [e['nome'] for e in equipes]
         )
     with col2:
         nome_filtro = st.text_input("Filtrar por nome:")
 
-    query = session.query(Jogador)
+    query = "SELECT id, nome, numero, nome_equipe FROM jogador"
+    params = []
     
     if equipe_filtro != "Todas":
-        query = query.filter_by(nome_equipe=equipe_filtro)
+        query += " WHERE nome_equipe = %s"
+        params.append(equipe_filtro)
     
     if nome_filtro:
-        query = query.filter(Jogador.nome.ilike(f"%{nome_filtro}%"))
+        if "WHERE" in query:
+            query += " AND nome LIKE %s"
+        else:
+            query += " WHERE nome LIKE %s"
+        params.append(f"%{nome_filtro}%")
 
-    jogadores = query.order_by(Jogador.nome).all()
+    query += " ORDER BY nome"
+    cursor.execute(query, params)
+    jogadores = cursor.fetchall()
 
     if jogadores:
         cols = st.columns(3)
         for i, jogador in enumerate(jogadores):
             with cols[i % 3]:
                 with st.container(border=True):
-                    st.markdown(f"**{jogador.nome}**")
-                    st.markdown(f"📌 Número: {jogador.numero}")
-                    st.markdown(f"🏆 Equipe: {jogador.nome_equipe if jogador.nome_equipe else 'Nenhuma'}")
+                    st.markdown(f"**{jogador['nome']}**")
+                    st.markdown(f"📌 Número: {jogador['numero']}")
+                    st.markdown(f"🏆 Equipe: {jogador['nome_equipe'] if jogador['nome_equipe'] else 'Nenhuma'}")
                     
-                    estatisticas = session.query(Estatistica).filter_by(jogador_id=jogador.id).all()
-                    total_gols = sum(e.gols for e in estatisticas)
-                    total_cartoes = sum(e.cartoes for e in estatisticas)
+                    cursor.execute(
+                        "SELECT SUM(gols) as total_gols, SUM(cartoes) as total_cartoes FROM estatistica WHERE jogador_id = %s",
+                        (jogador['id'],)
+                    )
+                    stats = cursor.fetchone()
+                    total_gols = stats['total_gols'] or 0
+                    total_cartoes = stats['total_cartoes'] or 0
                     
                     st.markdown(f"⚽ Gols totais: {total_gols}")
                     st.markdown(f"🟨 Cartões totais: {total_cartoes}")
     else:
         st.info("Nenhum jogador encontrado com os filtros selecionados.")
+    cursor.close()
         
-def editar_jogador(session):
+def editar_jogador(conn):
     st.header("Editar Jogador")
 
-    with st.spinner("Carregando jogadores..."):
-        jogadores = session.execute(
-            text("SELECT id, nome, numero, nome_equipe FROM jogador")
-        ).fetchall()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, nome, numero, nome_equipe FROM jogador")
+    jogadores = cursor.fetchall()
 
     if not jogadores:
         st.info("Nenhum jogador cadastrado ainda.")
         return
 
     opcoes_jogadores = [
-        f"{j[1]} | Nº {j[2]} | {j[3] if j[3] else 'Nenhuma'} (ID: {j[0]})"
+        f"{j['nome']} | Nº {j['numero']} | {j['nome_equipe'] if j['nome_equipe'] else 'Nenhuma'} (ID: {j['id']})"
         for j in jogadores
     ]
 
     jogador_selecionado = st.selectbox("Selecione o jogador para editar:", opcoes_jogadores)
     jogador_id = int(jogador_selecionado.split("(ID: ")[1].strip(")"))
 
-    jogador = session.execute(
-        text("SELECT nome, numero, nome_equipe FROM jogador WHERE id = :id"),
-        {"id": jogador_id}
-    ).fetchone()
+    cursor.execute("SELECT nome, numero, nome_equipe FROM jogador WHERE id = %s", (jogador_id,))
+    jogador = cursor.fetchone()
 
     if not jogador:
         st.error("Jogador não encontrado.")
         return
 
-    nome = st.text_input("Nome do Jogador:", value=jogador[0] or "")
-    numero = st.number_input("Número do Jogador:", min_value=1, value=jogador[1] or 1, step=1)
+    nome = st.text_input("Nome do Jogador:", value=jogador['nome'] or "")
+    numero = st.number_input("Número do Jogador:", min_value=1, value=jogador['numero'] or 1, step=1)
 
-    with st.spinner("Carregando equipes..."):
-        equipes = list(session.execute(text("SELECT nome FROM equipe")).fetchall())
-        equipes = [e[0] for e in equipes]
-
+    cursor.execute("SELECT nome FROM equipe")
+    equipes = [e['nome'] for e in cursor.fetchall()]
     lista_equipes = ["Nenhuma"] + equipes
     
-    equipe_index = lista_equipes.index(jogador[2]) if jogador[2] in lista_equipes else 0
+    equipe_index = lista_equipes.index(jogador['nome_equipe']) if jogador['nome_equipe'] in lista_equipes else 0
     equipe = st.selectbox("Equipe:", lista_equipes, index=equipe_index)
 
     nome_equipe = None if equipe == "Nenhuma" else equipe
@@ -183,31 +184,20 @@ def editar_jogador(session):
     if st.button("Salvar Alterações"):
         try:
             if nome_equipe:
-                equipe_existe = session.execute(
-                    text("SELECT 1 FROM equipe WHERE nome = :nome LIMIT 1"),
-                    {"nome": nome_equipe}
-                ).scalar()
-                
-                if not equipe_existe:
+                cursor.execute("SELECT 1 FROM equipe WHERE nome = %s LIMIT 1", (nome_equipe,))
+                if not cursor.fetchone():
                     st.error("A equipe selecionada não existe mais no banco de dados.")
                     return
 
-            session.execute(
-                text("""
-                    UPDATE jogador 
-                    SET nome = :nome, numero = :numero, nome_equipe = :equipe
-                    WHERE id = :id
-                """),
-                {
-                    "nome": nome,
-                    "numero": numero,
-                    "equipe": nome_equipe,
-                    "id": jogador_id
-                }
+            cursor.execute(
+                "UPDATE jogador SET nome = %s, numero = %s, nome_equipe = %s WHERE id = %s",
+                (nome, numero, nome_equipe, jogador_id)
             )
-            session.commit()
+            conn.commit()
             st.success("Jogador atualizado com sucesso!")
             st.rerun()
-        except Exception as e:
-            session.rollback()
+        except mysql.connector.Error as e:
+            conn.rollback()
             st.error(f"Erro ao atualizar jogador: {str(e)}")
+        finally:
+            cursor.close()
