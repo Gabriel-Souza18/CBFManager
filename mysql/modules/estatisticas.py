@@ -1,72 +1,86 @@
 import streamlit as st
 from database.models import Estatistica, Jogador, Jogo 
 import pandas as pd
+from sqlalchemy import or_, and_
 
 def cadastrar_estatisticas(session):
     st.header("Cadastrar Estatística de Jogador")
-
-    with st.spinner("Carregando jogadores e jogos..."):
-        jogadores = list(session.query(Jogador).all()) 
-        jogos = list(session.query(Jogo).all()) 
-
-    if not jogadores:
-        st.error("Não há jogadores cadastrados. Cadastre jogadores primeiro.")
-        return
-
-    if not jogos:
-        st.error("Não há jogos cadastrados. Cadastre jogos primeiro.")
-        return
-
-    lista_jogadores = [
-        f"{jogador.nome} (ID: {jogador.id})" for jogador in jogadores
-    ]
-    lista_jogos = [
-        f"{jogo.data} - {jogo.local} (ID: {jogo.id})" for jogo in jogos
-    ]
-
-    jogador_selecionado = st.selectbox("Escolha o Jogador:", lista_jogadores)
-    jogo_selecionado = st.selectbox("Escolha o Jogo:", lista_jogos)
-
-    jogador_id = int(jogador_selecionado.split(" (ID: ")[1].strip(")"))
-    jogo_id = int(jogo_selecionado.split(" (ID: ")[1].strip(")"))
-
-    gols = st.number_input("Gols Marcados:", min_value=0, step=1)
-    cartoes = st.number_input("Cartões Recebidos:", min_value=0, step=1)
-
-    if st.button("Cadastrar"):
-        filtro = {"jogador_id": jogador_id, "jogo_id": jogo_id}
-        with st.spinner("Verificando estatística existente..."):
-            
-            estat_existente = session.query(Estatistica).filter_by(
-                jogador_id=jogador_id, jogo_id=jogo_id
-            ).first()
-
-        if estat_existente:
-            novo_gols = estat_existente.gols + gols
-            novo_cartoes = estat_existente.cartoes + cartoes
-
-            with st.spinner("Atualizando estatística..."):
-                
-                session.query(Estatistica).filter_by(
-                    jogador_id=jogador_id, jogo_id=jogo_id
-                ).update(
-                    {"gols": novo_gols, "cartoes": novo_cartoes}
-                )
-                session.commit() 
-            st.success("Estatística atualizada com sucesso!")
-        else:
-            
-            nova_estatistica = Estatistica(
-                jogo_id=jogo_id,
-                jogador_id=jogador_id,
-                gols=gols,
-                cartoes=cartoes,
+      
+    with st.form("stats_form"):
+        jogadores = session.query(Jogador).order_by(Jogador.nome).all()
+        if not jogadores:
+            st.error("Cadastre jogadores primeiro.")
+            return
+        
+        jogador_selecionado = st.selectbox(
+            "Jogador:",
+            [f"{j.nome} (#{j.numero}) - {j.nome_equipe}" for j in jogadores]
+        )
+        jogador_nome = jogador_selecionado.split(" - ")[0].split(" (")[0]
+        jogador = next(j for j in jogadores if j.nome == jogador_nome)
+        
+        jogos = session.query(Jogo).filter(
+            or_(
+                Jogo.equipe1_id == jogador.nome_equipe,
+                Jogo.equipe2_id == jogador.nome_equipe
             )
-            session.add(nova_estatistica)
-            session.commit() 
-            st.success("Estatística cadastrada com sucesso!")
+        ).order_by(Jogo.data.desc()).all()
+        
+        if not jogos:
+            st.error("Nenhum jogo cadastrado para esta equipe.")
+            return
+            
+        jogo_selecionado = st.selectbox(
+            "Jogo:",
+            [f"{j.data} - {j.equipe1_id} vs {j.equipe2_id}" for j in jogos]
+        )
+        jogo_data = jogo_selecionado.split(" - ")[0]
+        jogo = next(j for j in jogos if str(j.data) == jogo_data)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            gols = st.number_input("Gols:", min_value=0, step=1)
+        with col2:
+            cartoes = st.number_input("Cartões:", min_value=0, step=1)
+        
+        submitted = st.form_submit_button("Salvar")
+        if submitted:
+            try:
+                existing = session.query(Estatistica).filter_by(
+                    jogador_id=jogador.id,
+                    jogo_id=jogo.id
+                ).first()
+                
+                if existing:
+                    existing.gols += gols
+                    existing.cartoes += cartoes
+                else:
+                    new_stat = Estatistica(
+                        jogador_id=jogador.id,
+                        jogo_id=jogo.id,
+                        gols=gols,
+                        cartoes=cartoes
+                    )
+                    session.add(new_stat)
+                
+                session.commit()
+                st.success("Estatísticas salvas com sucesso!")
+                st.rerun()
+            except Exception as e:
+                session.rollback()
+                st.error(f"Erro ao salvar estatísticas: {str(e)}")
 
-
+def estatisticas_operations(session):
+    tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+    
+    with tab1:
+        cadastrar_estatisticas(session)
+    
+    with tab2:
+        editar_estatisticas(session)
+    
+    with tab3:
+        deletar_estatisticas(session)
 
 def deletar_estatisticas(session):
     st.header("Deletar Estatística de Jogador")
@@ -81,7 +95,6 @@ def deletar_estatisticas(session):
     opcoes = []
     for estat in estatisticas:
         with st.spinner("Buscando informações..."):
-            
             jogador = session.query(Jogador).filter_by(id=estat.jogador_id).first()
             jogo = session.query(Jogo).filter_by(id=estat.jogo_id).first()
 
@@ -101,43 +114,45 @@ def deletar_estatisticas(session):
     escolha = st.selectbox("Escolha uma estatística para deletar:", opcoes_labels)
 
     if st.button("Deletar"):
-        selecionado = next(op for op in opcoes if op["label"] == escolha)
-        with st.spinner("Deletando estatística..."):
-            
-            session.query(Estatistica).filter_by(id=selecionado["id"]).delete()
-            session.commit() 
-        st.success("Estatística deletada com sucesso!")
-        st.rerun()
+        try:
+            selecionado = next(op for op in opcoes if op["label"] == escolha)
+            with st.spinner("Deletando estatística..."):
+                session.query(Estatistica).filter_by(id=selecionado["id"]).delete()
+                session.commit() 
+            st.success("Estatística deletada com sucesso!")
+            st.rerun()
+        except Exception as e:
+            session.rollback()
+            st.error(f"Erro ao deletar estatística: {str(e)}")
 
 def visualizar_estatisticas(session):
     st.subheader("📊 Estatísticas Registradas")
 
-    # Filtros
     jogo_filtro = st.session_state.get('jogo_selecionado', None)
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if jogo_filtro:
-            jogo = session.query(Jogo).filter_by(id=jogo_filtro).first()
-            st.write(f"**Jogo selecionado:** {jogo.equipe1_id} vs {jogo.equipe2_id} ({jogo.data})")
-            if st.button("Mostrar todas as estatísticas"):
-                del st.session_state.jogo_selecionado
-                st.rerun()
-        else:
-            jogos = session.query(Jogo).order_by(Jogo.data.desc()).all()
-            jogo_selecionado = st.selectbox(
-                "Filtrar por jogo:",
-                ["Todos"] + [f"{j.data} - {j.equipe1_id} vs {j.equipe2_id} (ID: {j.id})" for j in jogos]
-            )
+    with st.expander("Filtros", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            if jogo_filtro:
+                jogo = session.query(Jogo).filter_by(id=jogo_filtro).first()
+                st.write(f"**Jogo selecionado:** {jogo.equipe1_id} vs {jogo.equipe2_id} ({jogo.data})")
+                if st.button("Mostrar todas as estatísticas"):
+                    del st.session_state.jogo_selecionado
+                    st.rerun()
+            else:
+                jogos = session.query(Jogo).order_by(Jogo.data.desc()).all()
+                jogo_selecionado = st.selectbox(
+                    "Filtrar por jogo:",
+                    ["Todos"] + [f"{j.data} - {j.equipe1_id} vs {j.equipe2_id} (ID: {j.id})" for j in jogos]
+                )
     
-    with col2:
-        jogadores = session.query(Jogador).order_by(Jogador.nome).all()
-        jogador_selecionado = st.selectbox(
-            "Filtrar por jogador:",
-            ["Todos"] + [f"{j.nome} (ID: {j.id})" for j in jogadores]
-        )
+        with col2:
+            jogadores = session.query(Jogador).order_by(Jogador.nome).all()
+            jogador_selecionado = st.selectbox(
+                "Filtrar por jogador:",
+                ["Todos"] + [f"{j.nome} (ID: {j.id})" for j in jogadores]
+            )
 
-    # Construir query com filtros
     query = session.query(Estatistica)
     
     if jogo_filtro:
@@ -153,7 +168,6 @@ def visualizar_estatisticas(session):
     estatisticas = query.all()
 
     if estatisticas:
-        # Criar DataFrame para exibição
         dados = []
         for estat in estatisticas:
             jogador = session.query(Jogador).filter_by(id=estat.jogador_id).first()
@@ -167,7 +181,6 @@ def visualizar_estatisticas(session):
                 "Cartões": estat.cartoes
             })
 
-        # Exibir como tabela estilizada
         st.dataframe(
             pd.DataFrame(dados),
             use_container_width=True,
@@ -178,7 +191,6 @@ def visualizar_estatisticas(session):
             hide_index=True
         )
         
-        # Gráfico de gols por jogador
         st.subheader("📈 Gols por Jogador")
         df_gols = pd.DataFrame(dados).groupby("Jogador")["Gols"].sum().reset_index()
         st.bar_chart(df_gols.set_index("Jogador"))
@@ -196,10 +208,8 @@ def editar_estatisticas(session):
         st.info("Nenhuma estatística registrada ainda.")
         return
 
-    # Criar opções para o selectbox com informações completas
     opcoes = []
     for estat in estatisticas:
-        # Buscar informações do jogador e jogo
         jogador = session.query(Jogador).filter_by(id=estat.jogador_id).first()
         jogo = session.query(Jogo).filter_by(id=estat.jogo_id).first()
 
@@ -211,25 +221,21 @@ def editar_estatisticas(session):
 
     estatistica_selecionada = st.selectbox("Escolha a estatística para editar:", opcoes)
     
-    # Extrair o ID da estatística selecionada
     estat_id_str = estatistica_selecionada.split("ID: ")[1].strip()
     estat_id = int(estat_id_str)
     
-    # Buscar a estatística pelo ID
     estatistica = session.query(Estatistica).filter_by(id=estat_id).first()
 
     if not estatistica:
         st.error("Estatística não encontrada.")
         return
 
-    # Campos de edição com valores atuais
     gols = st.number_input("Gols Marcados:", min_value=0, value=estatistica.gols or 0, step=1)
     cartoes = st.number_input("Cartões Recebidos:", min_value=0, value=estatistica.cartoes or 0, step=1)
 
     if st.button("Salvar Alterações"):
         try:
             with st.spinner("Atualizando estatística..."):
-                # Atualizar a estatística
                 session.query(Estatistica).filter_by(id=estat_id).update({
                     "gols": gols,
                     "cartoes": cartoes
@@ -238,7 +244,6 @@ def editar_estatisticas(session):
                 
             st.success("Estatística atualizada com sucesso!")
             st.rerun()
-            
         except Exception as e:
             session.rollback()
-            st.error(f"Erro ao atualizar estatística: {e}")
+            st.error(f"Erro ao atualizar estatística: {str(e)}")

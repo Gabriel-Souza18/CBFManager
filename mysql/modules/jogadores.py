@@ -1,73 +1,64 @@
-# jogadores.py (atualizado)
 import streamlit as st
 from database.models import Jogador, Equipe, Estatistica 
-from sqlalchemy import func, text  # Adicionado text
+from sqlalchemy import func, text
+
+def validate_player_number(session, numero, nome_equipe):
+    existing = session.query(Jogador).filter_by(
+        numero=numero,
+        nome_equipe=nome_equipe
+    ).first()
+    return existing is None
+
+def jogador_operations(session):
+    tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+    
+    with tab1:
+        cadastrar_jogador(session)
+    
+    with tab2:
+        editar_jogador(session)
+    
+    with tab3:
+        deletar_jogador(session)
 
 def cadastrar_jogador(session):
     st.header("Cadastrar Jogador")
-    nome_jogador = st.text_input("Nome do Jogador:").strip()
-
-    with st.spinner("Carregando equipes..."):
-        equipes = session.execute(text("SELECT nome FROM equipe")).fetchall()
-        equipes = [e[0] for e in equipes]
-
-    lista_equipes = ["Nenhuma"] + equipes
-    equipe_selecionada = st.selectbox("Equipe:", lista_equipes)
-
-    numero_jogador = st.number_input("Número do Jogador:", min_value=1, step=1)
-
-    if st.button("Cadastrar Jogador"):
-        if not nome_jogador:
-            st.error("O nome do jogador não pode estar vazio.")
-            return
-
-        nome_equipe = None if equipe_selecionada == "Nenhuma" else equipe_selecionada
+    
+    with st.form("player_form"):
+        nome = st.text_input("Nome:").strip()
         
-        # Verificar se a equipe ainda existe
-        if nome_equipe:
-            equipe_existe = session.execute(
-                text("SELECT 1 FROM equipe WHERE nome = :nome LIMIT 1"),
-                {"nome": nome_equipe}
-            ).scalar()
+        equipes = session.query(Equipe).order_by(Equipe.nome).all()
+        equipe = st.selectbox(
+            "Equipe:",
+            ["Nenhuma"] + [e.nome for e in equipes]
+        )
+        
+        numero = st.number_input("Número:", min_value=1, max_value=99, step=1)
+        
+        submitted = st.form_submit_button("Cadastrar")
+        if submitted:
+            try:
+                if not nome:
+                    st.error("Nome é obrigatório")
+                    return
+                    
+                if equipe != "Nenhuma" and not validate_player_number(session, numero, equipe):
+                    st.error(f"O número {numero} já está em uso nesta equipe.")
+                    return
+                    
+                new_player = Jogador(
+                    nome=nome,
+                    numero=numero,
+                    nome_equipe=equipe if equipe != "Nenhuma" else None
+                )
+                session.add(new_player)
+                session.commit()
+                st.success("Jogador cadastrado com sucesso!")
+                st.rerun()
+            except Exception as e:
+                session.rollback()
+                st.error(f"Erro ao cadastrar jogador: {str(e)}")
             
-            if not equipe_existe:
-                st.error("A equipe selecionada não existe mais no banco de dados.")
-                return
-
-        jogador_existente = session.execute(
-            text("""
-                SELECT 1 FROM jogador 
-                WHERE nome = :nome 
-                AND numero = :numero
-                AND (nome_equipe = :equipe OR (:equipe IS NULL AND nome_equipe IS NULL))
-                LIMIT 1
-            """),
-            {
-                "nome": nome_jogador,
-                "numero": numero_jogador,
-                "equipe": nome_equipe
-            }
-        ).scalar()
-
-        if jogador_existente:
-            msg = f"Já existe um jogador com o número {numero_jogador}"
-            msg += f" na equipe '{nome_equipe}'." if nome_equipe else " sem equipe."
-            st.error(msg)
-        else:
-            session.execute(
-                text("""
-                    INSERT INTO jogador (nome, numero, nome_equipe)
-                    VALUES (:nome, :numero, :equipe)
-                """),
-                {
-                    "nome": nome_jogador,
-                    "numero": numero_jogador,
-                    "equipe": nome_equipe
-                }
-            )
-            session.commit()
-            st.success(f"Jogador '{nome_jogador}' cadastrado com sucesso!")
-
 def deletar_jogador(session):
     st.header("Deletar Jogador")
 
@@ -88,10 +79,10 @@ def deletar_jogador(session):
     )
 
     if st.button("Deletar"):
-        jogador_id_str = jogador_selecionado.split("(ID: ")[1].strip(")")
-        jogador_id = int(jogador_id_str) 
-
         try:
+            jogador_id_str = jogador_selecionado.split("(ID: ")[1].strip(")")
+            jogador_id = int(jogador_id_str) 
+
             jogador_to_delete = session.query(Jogador).filter_by(id=jogador_id).first()
             if jogador_to_delete:
                 with st.spinner("Deletando jogador e estatísticas relacionadas..."):
@@ -101,18 +92,13 @@ def deletar_jogador(session):
                 st.rerun()
             else:
                 st.error("Jogador não encontrado.")
-
         except Exception as e:
             session.rollback() 
-            st.error(f"Erro ao deletar: {e}")
+            st.error(f"Erro ao deletar jogador: {str(e)}")
 
-
-
-# jogadores.py (atualizado)
 def visualizar_jogador(session):
     st.subheader("👟 Jogadores Cadastrados")
     
-    # Filtros
     col1, col2 = st.columns(2)
     with col1:
         equipes = session.query(Equipe).order_by(Equipe.nome).all()
@@ -123,7 +109,6 @@ def visualizar_jogador(session):
     with col2:
         nome_filtro = st.text_input("Filtrar por nome:")
 
-    # Construir query com filtros
     query = session.query(Jogador)
     
     if equipe_filtro != "Todas":
@@ -135,7 +120,6 @@ def visualizar_jogador(session):
     jogadores = query.order_by(Jogador.nome).all()
 
     if jogadores:
-        # Criar cards para cada jogador
         cols = st.columns(3)
         for i, jogador in enumerate(jogadores):
             with cols[i % 3]:
@@ -144,7 +128,6 @@ def visualizar_jogador(session):
                     st.markdown(f"📌 Número: {jogador.numero}")
                     st.markdown(f"🏆 Equipe: {jogador.nome_equipe if jogador.nome_equipe else 'Nenhuma'}")
                     
-                    # Estatísticas do jogador
                     estatisticas = session.query(Estatistica).filter_by(jogador_id=jogador.id).all()
                     total_gols = sum(e.gols for e in estatisticas)
                     total_cartoes = sum(e.cartoes for e in estatisticas)
@@ -154,7 +137,6 @@ def visualizar_jogador(session):
     else:
         st.info("Nenhum jogador encontrado com os filtros selecionados.")
         
-# jogadores.py (continuação)
 def editar_jogador(session):
     st.header("Editar Jogador")
 
@@ -175,7 +157,6 @@ def editar_jogador(session):
     jogador_selecionado = st.selectbox("Selecione o jogador para editar:", opcoes_jogadores)
     jogador_id = int(jogador_selecionado.split("(ID: ")[1].strip(")"))
 
-    # Buscar dados atuais do jogador
     jogador = session.execute(
         text("SELECT nome, numero, nome_equipe FROM jogador WHERE id = :id"),
         {"id": jogador_id}
@@ -189,7 +170,7 @@ def editar_jogador(session):
     numero = st.number_input("Número do Jogador:", min_value=1, value=jogador[1] or 1, step=1)
 
     with st.spinner("Carregando equipes..."):
-        equipes = session.execute(text("SELECT nome FROM equipe")).fetchall()
+        equipes = list(session.execute(text("SELECT nome FROM equipe")).fetchall())
         equipes = [e[0] for e in equipes]
 
     lista_equipes = ["Nenhuma"] + equipes
@@ -201,7 +182,6 @@ def editar_jogador(session):
 
     if st.button("Salvar Alterações"):
         try:
-            # Verificar se a equipe ainda existe
             if nome_equipe:
                 equipe_existe = session.execute(
                     text("SELECT 1 FROM equipe WHERE nome = :nome LIMIT 1"),
@@ -228,7 +208,6 @@ def editar_jogador(session):
             session.commit()
             st.success("Jogador atualizado com sucesso!")
             st.rerun()
-            
         except Exception as e:
             session.rollback()
-            st.error(f"Erro ao atualizar jogador: {e}")
+            st.error(f"Erro ao atualizar jogador: {str(e)}")

@@ -2,89 +2,84 @@ import streamlit as st
 import datetime
 from database.models import Jogo, Equipe, Estatistica, Jogador
 import pandas as pd
-from sqlalchemy import or_, and_, text  # Adicionado text
+from sqlalchemy import or_, and_, text
+
+def validate_game(session, data, hora, equipe1, equipe2):
+    if equipe1 == equipe2:
+        return False, "As equipes devem ser diferentes"
+        
+    existing = session.query(Jogo).filter(
+        or_(
+            and_(
+                Jogo.equipe1_id == equipe1,
+                Jogo.equipe2_id == equipe2,
+                Jogo.data == data,
+                Jogo.hora == hora
+            ),
+            and_(
+                Jogo.equipe1_id == equipe2,
+                Jogo.equipe2_id == equipe1,
+                Jogo.data == data,
+                Jogo.hora == hora
+            )
+        )
+    ).first()
+    
+    if existing:
+        return False, "Jogo já cadastrado"
+        
+    return True, ""
+
+def jogo_operations(session):
+    tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+    
+    with tab1:
+        cadastrar_jogo(session)
+    
+    with tab2:
+        editar_jogo(session)
+    
+    with tab3:
+        deletar_jogo(session)
 
 def cadastrar_jogo(session):
     st.header("Cadastrar Jogo")
-
-    data_jogo = st.date_input("Data do Jogo:", datetime.date.today())
-    hora_jogo = st.time_input("Hora do Jogo:", datetime.time(19, 0))
-    local_jogo = st.text_input("Local do Jogo:").strip()
-
-    # Verificar se a arena existe
-    if local_jogo:
-        arena_existente = session.execute(
-            text("SELECT 1 FROM jogo WHERE local = :local LIMIT 1"),
-            {"local": local_jogo}
-        ).scalar()
-        if not arena_existente:
-            st.warning("⚠️ Esta arena ainda não foi registrada em nenhum jogo anterior.")
-
-    with st.spinner("Carregando equipes..."):
-        equipes = session.execute(text("SELECT nome FROM equipe")).fetchall()
-        equipes = [e[0] for e in equipes]
-
-    if not equipes:
-        st.error("Não há equipes cadastradas. Cadastre equipes primeiro.")
-        return
-
-    nome_equipe1 = st.selectbox("Escolha a Equipe 1:", equipes)
-    nome_equipe2 = st.selectbox("Escolha a Equipe 2:", equipes)
-
-    if nome_equipe1 == nome_equipe2:
-        st.error("A Equipe 1 e a Equipe 2 não podem ser a mesma.")
-        return
-
-    if st.button("Cadastrar Jogo"):
-        # Verificar se as equipes ainda existem
-        equipe1_existe = session.execute(
-            text("SELECT 1 FROM equipe WHERE nome = :nome LIMIT 1"),
-            {"nome": nome_equipe1}
-        ).scalar()
+    
+    with st.form("game_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            data = st.date_input("Data:", datetime.date.today())
+        with col2:
+            hora = st.time_input("Hora:", datetime.time(19, 0))
+            
+        local = st.text_input("Local:").strip()
         
-        equipe2_existe = session.execute(
-            text("SELECT 1 FROM equipe WHERE nome = :nome LIMIT 1"),
-            {"nome": nome_equipe2}
-        ).scalar()
-
-        if not equipe1_existe or not equipe2_existe:
-            st.error("Uma das equipes selecionadas não existe mais no banco de dados.")
-            return
-
-        jogo_existente = session.execute(
-            text("""
-                SELECT 1 FROM jogo 
-                WHERE ((equipe1_id = :equipe1 AND equipe2_id = :equipe2)
-                      OR (equipe1_id = :equipe2 AND equipe2_id = :equipe1))
-                AND data = :data AND hora = :hora
-                LIMIT 1
-            """),
-            {
-                "equipe1": nome_equipe1,
-                "equipe2": nome_equipe2,
-                "data": data_jogo,
-                "hora": hora_jogo
-            }
-        ).scalar()
-
-        if jogo_existente:
-            st.error("Já existe um jogo registrado entre essas equipes nessa data e hora.")
-        else:
-            session.execute(
-                text("""
-                    INSERT INTO jogo (data, hora, local, equipe1_id, equipe2_id)
-                    VALUES (:data, :hora, :local, :equipe1, :equipe2)
-                """),
-                {
-                    "data": data_jogo,
-                    "hora": hora_jogo,
-                    "local": local_jogo,
-                    "equipe1": nome_equipe1,
-                    "equipe2": nome_equipe2
-                }
-            )
-            session.commit()
-            st.success(f"Jogo entre {nome_equipe1} e {nome_equipe2} cadastrado com sucesso!")
+        equipes = session.query(Equipe).order_by(Equipe.nome).all()
+        equipe1 = st.selectbox("Equipe 1:", [e.nome for e in equipes])
+        equipe2 = st.selectbox("Equipe 2:", [e.nome for e in equipes])
+        
+        submitted = st.form_submit_button("Cadastrar")
+        if submitted:
+            try:
+                valid, msg = validate_game(session, data, hora, equipe1, equipe2)
+                if not valid:
+                    st.error(msg)
+                    return
+                    
+                new_game = Jogo(
+                    data=data,
+                    hora=hora,
+                    local=local,
+                    equipe1_id=equipe1,
+                    equipe2_id=equipe2
+                )
+                session.add(new_game)
+                session.commit()
+                st.success("Jogo cadastrado com sucesso!")
+                st.rerun()
+            except Exception as e:
+                session.rollback()
+                st.error(f"Erro ao cadastrar jogo: {str(e)}")
 
 def deletar_jogo(session):
     st.header("Deletar Jogo")
@@ -104,10 +99,10 @@ def deletar_jogo(session):
     jogo_selecionado = st.selectbox("Escolha o jogo para deletar:", opcoes_jogos)
 
     if st.button("Deletar"):
-        jogo_id_str = jogo_selecionado.split("(ID: ")[1].strip(")")
-        jogo_id = int(jogo_id_str)
-
         try:
+            jogo_id_str = jogo_selecionado.split("(ID: ")[1].strip(")")
+            jogo_id = int(jogo_id_str)
+
             jogo_to_delete = session.query(Jogo).filter_by(id=jogo_id).first()
             if jogo_to_delete:
                 with st.spinner("Deletando jogo e estatísticas associadas..."):
@@ -117,23 +112,18 @@ def deletar_jogo(session):
                 st.rerun()
             else:
                 st.error("Jogo não encontrado.")
-
         except Exception as e:
             session.rollback()
-            st.error(f"Erro ao deletar o jogo: {e}")
+            st.error(f"Erro ao deletar o jogo: {str(e)}")
 
-# Adicione esta função no arquivo jogos.py
 def mostrar_estatisticas_jogo(session, jogo_id):
-    """Mostra estatísticas detalhadas de um jogo específico"""
     jogo = session.query(Jogo).filter_by(id=jogo_id).first()
     if not jogo:
         st.error("Jogo não encontrado.")
         return
 
-    # Obter estatísticas do jogo
     estatisticas = session.query(Estatistica).filter_by(jogo_id=jogo_id).all()
     
-    # Calcular placar
     gols_equipe1 = 0
     gols_equipe2 = 0
     
@@ -144,7 +134,6 @@ def mostrar_estatisticas_jogo(session, jogo_id):
         elif jogador and jogador.nome_equipe == jogo.equipe2_id:
             gols_equipe2 += estat.gols
 
-    # Mostrar placar
     st.markdown(f"""
     <div style="
         background-color: #f0f2f6;
@@ -158,7 +147,6 @@ def mostrar_estatisticas_jogo(session, jogo_id):
     </div>
     """, unsafe_allow_html=True)
 
-    # Mostrar estatísticas por jogador
     st.subheader("Estatísticas dos Jogadores")
     
     if estatisticas:
@@ -185,7 +173,6 @@ def mostrar_estatisticas_jogo(session, jogo_id):
             hide_index=True
         )
         
-        # Gráficos adicionais
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Gols por Equipe")
@@ -209,14 +196,11 @@ def mostrar_estatisticas_jogo(session, jogo_id):
     else:
         st.info("Nenhuma estatística registrada para este jogo.")
 
-# Modifique a função visualizar_jogo para usar a expansão
 def visualizar_jogo(session):
     st.subheader("📅 Jogos Cadastrados")
 
-    # Verificar se há um jogo selecionado na sessão
     jogo_selecionado_id = st.session_state.get('jogo_selecionado', None)
     
-    # 1. Organizar filtros dentro de um expander para uma UI mais limpa
     with st.expander("Filtros", expanded=True):
         col1, col2, col3 = st.columns(3)
 
@@ -244,7 +228,6 @@ def visualizar_jogo(session):
                 key="equipe_filtro"
             )
 
-    # Aplicar filtros na consulta
     query = session.query(Jogo).filter(Jogo.data.between(data_inicio, data_fim))
 
     if equipe_filtro != "Todas":
@@ -262,7 +245,6 @@ def visualizar_jogo(session):
         st.info("Nenhum jogo encontrado com os filtros selecionados.")
         return
 
-    # Se houver um jogo selecionado, mostre-o primeiro
     if jogo_selecionado_id:
         jogo_selecionado = next((j for j in jogos if j.id == jogo_selecionado_id), None)
         if jogo_selecionado:
@@ -270,9 +252,7 @@ def visualizar_jogo(session):
                 mostrar_estatisticas_jogo(session, jogo_selecionado.id)
             st.divider()
 
-    # 2. Iterar e exibir cada jogo
     for jogo in jogos:
-        # Pular o jogo que já está sendo mostrado expandido
         if jogo_selecionado_id and jogo.id == jogo_selecionado_id:
             continue
             
@@ -292,7 +272,7 @@ def visualizar_jogo(session):
         
 def editar_jogo(session):
     st.header("Editar Jogo")
-    st.subheader("Editar um jogo irá deletar todas as estatísticas relacionadas ao mesmo")
+    st.warning("Editar um jogo irá deletar todas as estatísticas relacionadas ao mesmo")
 
     with st.spinner("Carregando jogos..."):
         jogos = list(session.query(Jogo).all())
@@ -301,7 +281,6 @@ def editar_jogo(session):
         st.info("Nenhum jogo cadastrado ainda.")
         return
 
-    # Criar opções para o selectbox
     opcoes_jogos = [
         f"{j.data} {j.hora} - {j.local} | {j.equipe1_id} vs {j.equipe2_id} (ID: {j.id})"
         for j in jogos
@@ -309,23 +288,19 @@ def editar_jogo(session):
 
     jogo_selecionado = st.selectbox("Selecione o jogo para editar:", opcoes_jogos)
     
-    # Extrair o ID do jogo selecionado
     jogo_id_str = jogo_selecionado.split("(ID: ")[1].strip(")")
     jogo_id = int(jogo_id_str)
     
-    # Buscar o jogo pelo ID
     jogo = session.query(Jogo).filter_by(id=jogo_id).first()
 
     if not jogo:
         st.error("Jogo não encontrado.")
         return
 
-    # Campos de edição com valores atuais
     data_jogo = st.date_input("Data do Jogo:", value=jogo.data)
     hora_jogo = st.time_input("Hora do Jogo:", value=jogo.hora)
     local_jogo = st.text_input("Local do Jogo:", value=jogo.local)
 
-    # Carregar equipes para os selectboxes
     with st.spinner("Carregando equipes..."):
         equipes = list(session.query(Equipe).all())
     
@@ -344,10 +319,8 @@ def editar_jogo(session):
     if st.button("Salvar Alterações"):
         try:
             with st.spinner("Atualizando jogo..."):
-                # Deletar estatísticas relacionadas (CASCADE)
                 session.query(Estatistica).filter_by(jogo_id=jogo_id).delete()
                 
-                # Atualizar o jogo
                 session.query(Jogo).filter_by(id=jogo_id).update({
                     "data": data_jogo,
                     "hora": hora_jogo,
@@ -359,7 +332,6 @@ def editar_jogo(session):
                 
             st.success("Jogo atualizado e estatísticas relacionadas deletadas com sucesso!")
             st.rerun()
-            
         except Exception as e:
             session.rollback()
-            st.error(f"Erro ao atualizar jogo: {e}")
+            st.error(f"Erro ao atualizar jogo: {str(e)}")

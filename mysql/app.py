@@ -1,6 +1,6 @@
-# app.py (atualizado)
+# app.py (versão completa atualizada)
 import streamlit as st
-from modules import pessoas, jogadores, equipes, jogos, estatisticas, consultas
+from modules import pessoas, jogadores, equipes, jogos, estatisticas
 from database.connection import get_db
 from database.models import Pessoa 
 
@@ -25,6 +25,20 @@ st.markdown("""
         .css-1q1n0ol { font-size: 1.1rem; }
         .css-10trblm { font-size: 1.8rem; }
         .css-1v3fvcr { margin-bottom: 1rem; }
+        
+        /* Estilo para as abas */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 10px;
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            padding: 8px 16px;
+            border-radius: 4px 4px 0 0;
+        }
+        
+        .stTabs [aria-selected="true"] {
+            background-color: #f0f2f6;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -76,20 +90,11 @@ else:
             st.subheader("📋 Menu do Administrador")
             menu_opcoes = [
                 "🏠 Início",
-                "👥 Cadastrar Pessoa",
-                "🗑️ Deletar Pessoa",
-                "👟 Cadastrar Jogador",
-                "❌ Deletar Jogador",
-                "✏️ Editar Jogador",
-                "🏆 Cadastrar Equipe",
-                "🚫 Deletar Equipe",
-                "⚽ Cadastrar Jogo",
-                "❎ Deletar Jogo",
-                "🖊️ Editar Jogo",
-                "📊 Cadastrar Estatísticas",
-                "🗑️ Deletar Estatísticas",
-                "✏️ Editar Estatisticas",
-                "🔍 Consulta SQL"
+                "👥 Usuários",
+                "👟 Jogadores",
+                "🏆 Equipes",
+                "⚽ Jogos",
+                "📊 Estatísticas"
             ]
             page = st.selectbox("Selecione uma opção:", menu_opcoes)
         else:
@@ -108,44 +113,68 @@ else:
     
     # Página inicial
     if page == "🏠 Início" or page is None:
-        st.subheader("Bem-vindo ao CBF Manager")
-        st.markdown("""
-            **Sistema de gerenciamento de times e estatísticas de futebol**
-            
-            Utilize o menu lateral para navegar entre as funcionalidades.
-        """)
+        if st.session_state.pessoa["tipo"] == "administrador":
+            st.subheader("Bem-vindo ao Painel Administrativo")
+            st.markdown("""
+                **Menu de Administração Completo**
+                
+                Selecione uma opção no menu lateral para gerenciar:
+                - 👥 Usuários do sistema
+                - 👟 Jogadores e suas informações
+                - 🏆 Equipes participantes
+                - ⚽ Jogos agendados
+                - 📊 Estatísticas de desempenho
+            """)
+        else:
+            st.subheader("Bem-vindo ao CBF Manager")
+            st.markdown("""
+                **Sistema de consulta de times e estatísticas de futebol**
+                
+                Utilize o menu lateral para acessar as informações disponíveis.
+            """)
         st.image("./assets/soccer_field.jpeg", use_column_width=True)
     
     # Páginas do administrador
     elif st.session_state.pessoa["tipo"] == "administrador":
-        if page == "👥 Cadastrar Pessoa":
-            pessoas.cadastrar_pessoa(session)
-        elif page == "🗑️ Deletar Pessoa":
-            pessoas.deletar_pessoa(session)
-        elif page == "👟 Cadastrar Jogador":
-            jogadores.cadastrar_jogador(session)
-        elif page == "❌ Deletar Jogador":
-            jogadores.deletar_jogador(session)
-        elif page == "✏️ Editar Jogador":
-            jogadores.editar_jogador(session)
-        elif page == "🏆 Cadastrar Equipe":
-            equipes.cadastrar_equipe(session)
-        elif page == "🚫 Deletar Equipe":
-            equipes.deletar_equipe(session)
-        elif page == "⚽ Cadastrar Jogo":
-            jogos.cadastrar_jogo(session)
-        elif page == "❎ Deletar Jogo":
-            jogos.deletar_jogo(session)
-        elif page == "🖊️ Editar Jogo":
-            jogos.editar_jogo(session)
-        elif page == "📊 Cadastrar Estatísticas":
-            estatisticas.cadastrar_estatisticas(session)
-        elif page == "🗑️ Deletar Estatísticas":
-            estatisticas.deletar_estatisticas(session)
-        elif page == "✏️ Editar Estatisticas":
-            estatisticas.editar_estatisticas(session)
-        elif page == "🔍 Consulta SQL":
-            consultas.consultar(session)
+        if page == "👥 Usuários":
+            tab1, tab2 = st.tabs(["Cadastrar", "Deletar"])
+            with tab1:
+                pessoas.cadastrar_pessoa(session)
+            with tab2:
+                pessoas.deletar_pessoa(session)
+                    
+        elif page == "👟 Jogadores":
+            tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+            with tab1:
+                jogadores.cadastrar_jogador(session)
+            with tab2:
+                jogadores.editar_jogador(session)
+            with tab3:
+                jogadores.deletar_jogador(session)
+        elif page == "🏆 Equipes":
+            tab1, tab2 = st.tabs(["Cadastrar", "Deletar"])
+            with tab1:
+                equipes.cadastrar_equipe(session)
+            with tab2:
+                equipes.deletar_equipe(session)
+            
+        elif page == "⚽ Jogos":
+            tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+            with tab1:
+                jogos.cadastrar_jogo(session)
+            with tab2:
+                jogos.editar_jogo(session)
+            with tab3:
+                jogos.deletar_jogo(session)
+            
+        elif page == "📊 Estatísticas":
+            tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
+            with tab1:
+                estatisticas.cadastrar_estatisticas(session)
+            with tab2:
+                estatisticas.editar_estatisticas(session)
+            with tab3:
+                estatisticas.deletar_estatisticas(session)
     
     # Páginas do usuário
     else:
