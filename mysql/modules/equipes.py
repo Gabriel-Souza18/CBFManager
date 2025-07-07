@@ -1,6 +1,6 @@
 import streamlit as st
 from database.models import Equipe, Jogador, Jogo, Estatistica 
-from sqlalchemy import or_, text 
+from sqlalchemy import or_, text, func
 import pandas as pd
 
 def cadastrar_equipe(session):
@@ -88,7 +88,7 @@ def deletar_equipe(session):
             st.error(f"Erro ao deletar: {e}")
 
 
-# equipes.py (atualizado)
+# equipes.py (corrigido)
 def visualizar_equipe(session):
     st.subheader("🏆 Equipes Cadastradas")
     
@@ -136,6 +136,7 @@ def visualizar_equipe(session):
                             Jogador, Estatistica.jogador_id == Jogador.id
                         ).filter(Jogador.nome_equipe == equipe.nome).scalar() or 0
                         
-                        st.metric("Total de Gols", total_gols)
+                        # Convertendo o Decimal para int antes de exibir
+                        st.metric("Total de Gols", int(total_gols))
     else:
         st.info("Nenhuma equipe cadastrada ainda.")

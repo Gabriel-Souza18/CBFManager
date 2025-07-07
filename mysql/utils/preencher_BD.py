@@ -66,9 +66,7 @@ def cadastrar_pessoas():
 def cadastrar_equipes():
     """Cadastra uma lista expandida de times brasileiros."""
     nomes = [
-        "Flamengo", "Palmeiras", "São Paulo", "Vasco da Gama", "Corinthians", "Grêmio", "Internacional",
-        "Cruzeiro", "Atlético-MG", "Bahia", "Santos", "Botafogo", "Fluminense", "Athletico-PR",
-        "Coritiba", "Goiás", "Fortaleza", "Ceará", "Sport Recife", "Vitória"
+        "Flamengo", "Palmeiras" , "Atlético - MG" , "Cruzeiro"
     ]
     for nome in nomes:
         existe = session.query(Equipe).filter_by(nome=nome).first()

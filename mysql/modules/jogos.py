@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
-from database.models import Jogo, Equipe, Estatistica 
+from database.models import Jogo, Equipe, Estatistica, Jogador
+import pandas as pd
 from sqlalchemy import or_, and_, text  # Adicionado text
 
 def cadastrar_jogo(session):
@@ -121,58 +122,131 @@ def deletar_jogo(session):
             session.rollback()
             st.error(f"Erro ao deletar o jogo: {e}")
 
-def formatar_jogo(jogo):
-    return f"""
-    <div style="
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 15px;
-        background-color: #f9f9f9;
-    ">
-        <div style="display: flex; justify-content: space-between;">
-            <div>
-                <h3 style="margin-bottom: 5px;">{jogo.equipe1_id} vs {jogo.equipe2_id}</h3>
-                <p style="margin: 0;"><b>Data:</b> {jogo.data}</p>
-                <p style="margin: 0;"><b>Hora:</b> {jogo.hora.strftime('%H:%M') if jogo.hora else '--:--'}</p>
-                <p style="margin: 0;"><b>Local:</b> {jogo.local}</p>
-            </div>
-            <div style="align-self: center;">
-                <button onclick="window.location.href='?jogo_id={jogo.id}'" style="
-                    background-color: #4CAF50;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    text-align: center;
-                    text-decoration: none;
-                    display: inline-block;
-                    font-size: 14px;
-                    margin: 4px 2px;
-                    cursor: pointer;
-                    border-radius: 4px;
-                ">
-                    📊 Estatísticas
-                </button>
-            </div>
-        </div>
-    </div>
-    """
+# Adicione esta função no arquivo jogos.py
+def mostrar_estatisticas_jogo(session, jogo_id):
+    """Mostra estatísticas detalhadas de um jogo específico"""
+    jogo = session.query(Jogo).filter_by(id=jogo_id).first()
+    if not jogo:
+        st.error("Jogo não encontrado.")
+        return
 
+    # Obter estatísticas do jogo
+    estatisticas = session.query(Estatistica).filter_by(jogo_id=jogo_id).all()
+    
+    # Calcular placar
+    gols_equipe1 = 0
+    gols_equipe2 = 0
+    
+    for estat in estatisticas:
+        jogador = session.query(Jogador).filter_by(id=estat.jogador_id).first()
+        if jogador and jogador.nome_equipe == jogo.equipe1_id:
+            gols_equipe1 += estat.gols
+        elif jogador and jogador.nome_equipe == jogo.equipe2_id:
+            gols_equipe2 += estat.gols
+
+    # Mostrar placar
+    st.markdown(f"""
+    <div style="
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 20px;
+    ">
+        <h2 style="margin: 0; color: #333;">{jogo.equipe1_id} {gols_equipe1} × {gols_equipe2} {jogo.equipe2_id}</h2>
+        <p style="margin: 5px 0 0 0; color: #666;">{jogo.data.strftime('%d/%m/%Y')} • {jogo.local}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Mostrar estatísticas por jogador
+    st.subheader("Estatísticas dos Jogadores")
+    
+    if estatisticas:
+        dados = []
+        for estat in estatisticas:
+            jogador = session.query(Jogador).filter_by(id=estat.jogador_id).first()
+            if jogador:
+                dados.append({
+                    "Jogador": jogador.nome,
+                    "Equipe": jogador.nome_equipe,
+                    "Número": jogador.numero,
+                    "Gols": estat.gols,
+                    "Cartões": estat.cartoes
+                })
+
+        df = pd.DataFrame(dados)
+        st.dataframe(
+            df,
+            use_container_width=True,
+            column_config={
+                "Gols": st.column_config.NumberColumn(format="%d ⚽"),
+                "Cartões": st.column_config.NumberColumn(format="%d 🟨")
+            },
+            hide_index=True
+        )
+        
+        # Gráficos adicionais
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Gols por Equipe")
+            df_gols = pd.DataFrame({
+                "Equipe": [jogo.equipe1_id, jogo.equipe2_id],
+                "Gols": [gols_equipe1, gols_equipe2]
+            })
+            st.bar_chart(df_gols.set_index("Equipe"))
+            
+        with col2:
+            st.subheader("Cartões por Equipe")
+            cartoes_equipe1 = sum(e.cartoes for e in estatisticas 
+                                 if session.query(Jogador).filter_by(id=e.jogador_id).first().nome_equipe == jogo.equipe1_id)
+            cartoes_equipe2 = sum(e.cartoes for e in estatisticas 
+                                 if session.query(Jogador).filter_by(id=e.jogador_id).first().nome_equipe == jogo.equipe2_id)
+            df_cartoes = pd.DataFrame({
+                "Equipe": [jogo.equipe1_id, jogo.equipe2_id],
+                "Cartões": [cartoes_equipe1, cartoes_equipe2]
+            })
+            st.bar_chart(df_cartoes.set_index("Equipe"))
+    else:
+        st.info("Nenhuma estatística registrada para este jogo.")
+
+# Modifique a função visualizar_jogo para usar a expansão
 def visualizar_jogo(session):
     st.subheader("📅 Jogos Cadastrados")
-    
-    # Filtros
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        data_inicio = st.date_input("Data inicial", datetime.date.today() - datetime.timedelta(days=30))
-    with col2:
-        data_fim = st.date_input("Data final", datetime.date.today())
-    with col3:
-        equipes = session.query(Equipe).all()
-        equipe_filtro = st.selectbox("Filtrar por equipe", ["Todas"] + [e.nome for e in equipes])
 
-    # Aplicar filtros
+    # Verificar se há um jogo selecionado na sessão
+    jogo_selecionado_id = st.session_state.get('jogo_selecionado', None)
+    
+    # 1. Organizar filtros dentro de um expander para uma UI mais limpa
+    with st.expander("Filtros", expanded=True):
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            default_start_date = st.session_state.get('data_inicio', datetime.date.today() - datetime.timedelta(days=30))
+            data_inicio = st.date_input(
+                "Data inicial",
+                value=default_start_date,
+                key="data_inicio"
+            )
+
+        with col2:
+            default_end_date = st.session_state.get('data_fim', datetime.date.today())
+            data_fim = st.date_input(
+                "Data final",
+                value=default_end_date,
+                key="data_fim"
+            )
+
+        with col3:
+            equipes = session.query(Equipe).order_by(Equipe.nome).all()
+            equipe_filtro = st.selectbox(
+                "Filtrar por equipe",
+                ["Todas"] + [e.nome for e in equipes],
+                key="equipe_filtro"
+            )
+
+    # Aplicar filtros na consulta
     query = session.query(Jogo).filter(Jogo.data.between(data_inicio, data_fim))
+
     if equipe_filtro != "Todas":
         query = query.filter(or_(
             Jogo.equipe1_id == equipe_filtro,
@@ -181,20 +255,40 @@ def visualizar_jogo(session):
 
     jogos = query.order_by(Jogo.data.desc(), Jogo.hora.desc()).all()
 
-    if jogos:
-        st.markdown(f"**Total de jogos encontrados:** {len(jogos)}")
-        
-        for jogo in jogos:
-            # Usando HTML e CSS para melhorar a aparência
-            st.markdown(formatar_jogo(jogo), unsafe_allow_html=True)
-            
-            # Verifica se o botão de estatísticas foi clicado
-            if st.session_state.get(f"stats_{jogo.id}"):
-                st.session_state.jogo_selecionado = jogo.id
-                st.session_state.current_page = "📊 Visualizar Estatísticas"
-                st.rerun()
-    else:
+    st.markdown(f"**Total de jogos encontrados:** {len(jogos)}")
+    st.divider()
+
+    if not jogos:
         st.info("Nenhum jogo encontrado com os filtros selecionados.")
+        return
+
+    # Se houver um jogo selecionado, mostre-o primeiro
+    if jogo_selecionado_id:
+        jogo_selecionado = next((j for j in jogos if j.id == jogo_selecionado_id), None)
+        if jogo_selecionado:
+            with st.expander(f"📊 Estatísticas: {jogo_selecionado.equipe1_id} vs {jogo_selecionado.equipe2_id}", expanded=True):
+                mostrar_estatisticas_jogo(session, jogo_selecionado.id)
+            st.divider()
+
+    # 2. Iterar e exibir cada jogo
+    for jogo in jogos:
+        # Pular o jogo que já está sendo mostrado expandido
+        if jogo_selecionado_id and jogo.id == jogo_selecionado_id:
+            continue
+            
+        with st.container(border=True):
+            info_col, action_col = st.columns([3, 1])
+
+            with info_col:
+                st.markdown(f"#### {jogo.equipe1_id} vs {jogo.equipe2_id}")
+                st.markdown(f"📅 **Data:** {jogo.data.strftime('%d/%m/%Y')}")
+                st.markdown(f"🕒 **Hora:** {jogo.hora.strftime('%H:%M') if jogo.hora else '--:--'}")
+                st.markdown(f"📍 **Local:** {jogo.local}")
+
+            with action_col:
+                if st.button("Ver Estatísticas", key=f"stats_{jogo.id}"):
+                    st.session_state.jogo_selecionado = jogo.id
+                    st.rerun()
         
 def editar_jogo(session):
     st.header("Editar Jogo")
