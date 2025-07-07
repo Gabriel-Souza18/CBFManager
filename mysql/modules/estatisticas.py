@@ -7,36 +7,53 @@ def cadastrar_estatisticas(session):
     st.header("Cadastrar Estatística de Jogador")
       
     with st.form("stats_form"):
+        # Carrega todos os jogadores
         jogadores = session.query(Jogador).order_by(Jogador.nome).all()
+        
         if not jogadores:
             st.error("Cadastre jogadores primeiro.")
             return
         
+        # Seleção do jogador
         jogador_selecionado = st.selectbox(
             "Jogador:",
             [f"{j.nome} (#{j.numero}) - {j.nome_equipe}" for j in jogadores]
         )
+        
+        # Extrai o nome do jogador e encontra o objeto correspondente
         jogador_nome = jogador_selecionado.split(" - ")[0].split(" (")[0]
         jogador = next(j for j in jogadores if j.nome == jogador_nome)
         
-        jogos = session.query(Jogo).filter(
-            or_(
-                Jogo.equipe1_id == jogador.nome_equipe,
-                Jogo.equipe2_id == jogador.nome_equipe
-            )
-        ).order_by(Jogo.data.desc()).all()
+        # Filtra jogos somente da equipe do jogador
+        if jogador.nome_equipe:
+            jogos = session.query(Jogo).filter(
+                or_(
+                    Jogo.equipe1_id == jogador.nome_equipe,
+                    Jogo.equipe2_id == jogador.nome_equipe
+                )
+            ).order_by(Jogo.data.desc()).all()
+        else:
+            jogos = []
         
         if not jogos:
-            st.error("Nenhum jogo cadastrado para esta equipe.")
+            if jogador.nome_equipe:
+                st.error(f"Nenhum jogo cadastrado para a equipe {jogador.nome_equipe}.")
+            else:
+                st.error("Este jogador não está vinculado a nenhuma equipe.")
             return
             
+        # Seleção do jogo (somente jogos da equipe do jogador)
         jogo_selecionado = st.selectbox(
             "Jogo:",
-            [f"{j.data} - {j.equipe1_id} vs {j.equipe2_id}" for j in jogos]
+            [f"{j.data} - {j.equipe1_id} vs {j.equipe2_id}" for j in jogos],
+            key="jogo_select"
         )
+        
+        # Encontra o jogo selecionado
         jogo_data = jogo_selecionado.split(" - ")[0]
         jogo = next(j for j in jogos if str(j.data) == jogo_data)
         
+        # Input das estatísticas
         col1, col2 = st.columns(2)
         with col1:
             gols = st.number_input("Gols:", min_value=0, step=1)
@@ -46,6 +63,12 @@ def cadastrar_estatisticas(session):
         submitted = st.form_submit_button("Salvar")
         if submitted:
             try:
+                # Verifica se o jogador realmente pertence a uma das equipes do jogo
+                if jogador.nome_equipe not in [jogo.equipe1_id, jogo.equipe2_id]:
+                    st.error("Este jogador não pertence a nenhuma das equipes deste jogo!")
+                    return
+                
+                # Verifica se já existe estatística para este jogador neste jogo
                 existing = session.query(Estatistica).filter_by(
                     jogador_id=jogador.id,
                     jogo_id=jogo.id
@@ -54,6 +77,7 @@ def cadastrar_estatisticas(session):
                 if existing:
                     existing.gols += gols
                     existing.cartoes += cartoes
+                    msg = "Estatísticas atualizadas"
                 else:
                     new_stat = Estatistica(
                         jogador_id=jogador.id,
@@ -62,14 +86,15 @@ def cadastrar_estatisticas(session):
                         cartoes=cartoes
                     )
                     session.add(new_stat)
+                    msg = "Estatísticas cadastradas"
                 
                 session.commit()
-                st.success("Estatísticas salvas com sucesso!")
+                st.success(f"{msg} com sucesso para {jogador.nome} no jogo {jogo.equipe1_id} vs {jogo.equipe2_id}!")
                 st.rerun()
             except Exception as e:
                 session.rollback()
                 st.error(f"Erro ao salvar estatísticas: {str(e)}")
-
+                
 def estatisticas_operations(session):
     tab1, tab2, tab3 = st.tabs(["Cadastrar", "Editar", "Deletar"])
     
