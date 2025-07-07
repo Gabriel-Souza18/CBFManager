@@ -303,7 +303,23 @@ def editar_jogo(conn):
         return
 
     data_jogo = st.date_input("Data do Jogo:", value=jogo['data'])
-    hora_jogo = st.time_input("Hora do Jogo:", value=jogo['hora'])
+    
+    # Handle the time value properly
+    hora_value = jogo['hora']
+    if isinstance(hora_value, datetime.timedelta):
+        # Convert timedelta to time
+        total_seconds = int(hora_value.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        hora_value = datetime.time(hours, minutes)
+    elif isinstance(hora_value, str):
+        # Parse string to time if needed
+        try:
+            hora_value = datetime.datetime.strptime(hora_value, '%H:%M:%S').time()
+        except ValueError:
+            hora_value = datetime.time(19, 0)  # default value
+    
+    hora_jogo = st.time_input("Hora do Jogo:", value=hora_value)
     local_jogo = st.text_input("Local do Jogo:", value=jogo['local'])
 
     cursor.execute("SELECT nome FROM equipe")
