@@ -1,6 +1,6 @@
 import streamlit as st
 from database.models import Estatistica, Jogador, Jogo 
-
+import pandas as pd
 
 def cadastrar_estatisticas(session):
     st.header("Cadastrar Estatística de Jogador")
@@ -109,40 +109,83 @@ def deletar_estatisticas(session):
         st.success("Estatística deletada com sucesso!")
         st.rerun()
 
-
-
 def visualizar_estatisticas(session):
-    st.subheader("Estatísticas Registradas")
+    st.subheader("📊 Estatísticas Registradas")
 
-    with st.spinner("Carregando estatísticas..."):
-        estatisticas = list(session.query(Estatistica).all()) 
+    # Filtros
+    jogo_filtro = st.session_state.get('jogo_selecionado', None)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if jogo_filtro:
+            jogo = session.query(Jogo).filter_by(id=jogo_filtro).first()
+            st.write(f"**Jogo selecionado:** {jogo.equipe1_id} vs {jogo.equipe2_id} ({jogo.data})")
+            if st.button("Mostrar todas as estatísticas"):
+                del st.session_state.jogo_selecionado
+                st.rerun()
+        else:
+            jogos = session.query(Jogo).order_by(Jogo.data.desc()).all()
+            jogo_selecionado = st.selectbox(
+                "Filtrar por jogo:",
+                ["Todos"] + [f"{j.data} - {j.equipe1_id} vs {j.equipe2_id} (ID: {j.id})" for j in jogos]
+            )
+    
+    with col2:
+        jogadores = session.query(Jogador).order_by(Jogador.nome).all()
+        jogador_selecionado = st.selectbox(
+            "Filtrar por jogador:",
+            ["Todos"] + [f"{j.nome} (ID: {j.id})" for j in jogadores]
+        )
+
+    # Construir query com filtros
+    query = session.query(Estatistica)
+    
+    if jogo_filtro:
+        query = query.filter_by(jogo_id=jogo_filtro)
+    elif jogo_selecionado != "Todos":
+        jogo_id = int(jogo_selecionado.split("ID: ")[1].strip(")"))
+        query = query.filter_by(jogo_id=jogo_id)
+    
+    if jogador_selecionado != "Todos":
+        jogador_id = int(jogador_selecionado.split("ID: ")[1].strip(")"))
+        query = query.filter_by(jogador_id=jogador_id)
+
+    estatisticas = query.all()
 
     if estatisticas:
-        dados_tabela = []
-        for estatistica in estatisticas:
-            with st.spinner("Buscando informações de jogador e jogo..."):
-                
-                jogador = session.query(Jogador).filter_by(id=estatistica.jogador_id).first()
-                jogo = session.query(Jogo).filter_by(id=estatistica.jogo_id).first()
+        # Criar DataFrame para exibição
+        dados = []
+        for estat in estatisticas:
+            jogador = session.query(Jogador).filter_by(id=estat.jogador_id).first()
+            jogo = session.query(Jogo).filter_by(id=estat.jogo_id).first()
+            
+            dados.append({
+                "Jogador": jogador.nome if jogador else "Desconhecido",
+                "Equipe": jogador.nome_equipe if jogador else "Nenhuma",
+                "Jogo": f"{jogo.data} - {jogo.equipe1_id} vs {jogo.equipe2_id}" if jogo else "Desconhecido",
+                "Gols": estat.gols,
+                "Cartões": estat.cartoes
+            })
 
-            jogador_nome = jogador.nome if jogador else "Jogador não encontrado"
-            jogo_data = jogo.data if jogo else "Data não encontrada"
-            jogo_local = jogo.local if jogo else "Local não encontrado"
-
-            dados_tabela.append(
-                {
-                    "Jogador": jogador_nome,
-                    "Jogo": f"{jogo_data} - {jogo_local}",
-                    "Gols": estatistica.gols,
-                    "Cartões": estatistica.cartoes,
-                }
-            )
-
-        st.table(dados_tabela)
-    else:
-        st.info("Nenhuma estatística registrada ainda.")
+        # Exibir como tabela estilizada
+        st.dataframe(
+            pd.DataFrame(dados),
+            use_container_width=True,
+            column_config={
+                "Gols": st.column_config.NumberColumn(format="%d ⚽"),
+                "Cartões": st.column_config.NumberColumn(format="%d🟨")
+            },
+            hide_index=True
+        )
         
-
+        # Gráfico de gols por jogador
+        st.subheader("📈 Gols por Jogador")
+        df_gols = pd.DataFrame(dados).groupby("Jogador")["Gols"].sum().reset_index()
+        st.bar_chart(df_gols.set_index("Jogador"))
+        
+    else:
+        st.info("Nenhuma estatística encontrada com os filtros selecionados.")
+        
 def editar_estatisticas(session):
     st.header("Editar Estatística de Jogador")
 
