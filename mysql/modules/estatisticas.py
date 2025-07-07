@@ -5,7 +5,6 @@ import pandas as pd
 def cadastrar_estatisticas(conn):
     st.header("Cadastrar Estatística de Jogador")
     
-    # Primeiro, selecione o jogador fora do formulário
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, nome, numero, nome_equipe FROM jogador ORDER BY nome")
     jogadores = cursor.fetchall()
@@ -14,7 +13,6 @@ def cadastrar_estatisticas(conn):
         st.error("Cadastre jogadores primeiro.")
         return
     
-    # Função para atualizar os jogos disponíveis
     def update_jogos():
         if 'jogador_selected' in st.session_state:
             jogador_nome = st.session_state.jogador_selected.split(" - ")[0].split(" (")[0]
@@ -30,7 +28,6 @@ def cadastrar_estatisticas(conn):
             else:
                 st.session_state.jogos_disponiveis = []
     
-    # Selectbox do jogador com callback (fora do formulário)
     jogador_selecionado = st.selectbox(
         "Jogador:",
         [f"{j['nome']} (#{j['numero']}) - {j['nome_equipe']}" for j in jogadores],
@@ -38,24 +35,20 @@ def cadastrar_estatisticas(conn):
         on_change=update_jogos
     )
     
-    # Inicializa a lista de jogos se não existir
     if 'jogos_disponiveis' not in st.session_state:
         update_jogos()
     
     jogador_nome = jogador_selecionado.split(" - ")[0].split(" (")[0]
     jogador = next(j for j in jogadores if j['nome'] == jogador_nome)
     
-    # Verifica se o jogador tem equipe definida
     if not jogador['nome_equipe']:
         st.error("Este jogador não está vinculado a nenhuma equipe. Atualize o cadastro do jogador primeiro.")
         return
     
-    # Mostra os jogos disponíveis para o jogador selecionado
     if not st.session_state.jogos_disponiveis:
         st.error(f"Nenhum jogo cadastrado para a equipe {jogador['nome_equipe']}.")
         return
     
-    # Agora o formulário só contém os campos que serão submetidos
     with st.form("stats_form"):
         jogo_selecionado = st.selectbox(
             "Jogo:",
@@ -66,7 +59,6 @@ def cadastrar_estatisticas(conn):
         jogo_data = jogo_selecionado.split(" - ")[0]
         jogo = next(j for j in st.session_state.jogos_disponiveis if str(j['data']) == jogo_data)
         
-        # Mostra informações de confirmação
         st.info(f"Jogador: {jogador['nome']} - Equipe: {jogador['nome_equipe']}")
         st.info(f"Jogo selecionado: {jogo['equipe1_id']} vs {jogo['equipe2_id']} em {jogo['data']}")
         
@@ -79,7 +71,6 @@ def cadastrar_estatisticas(conn):
         submitted = st.form_submit_button("Salvar")
         if submitted:
             try:
-                # Verificação redundante (já garantido pela query, mas importante para segurança)
                 if jogador['nome_equipe'] not in [jogo['equipe1_id'], jogo['equipe2_id']]:
                     st.error("Erro: Este jogador não pertence a nenhuma das equipes deste jogo!")
                     return
