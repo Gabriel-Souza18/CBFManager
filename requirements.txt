@@ -1,7 +1,17 @@
+# ==============================================================================
+# ARQUIVO: requirements.txt
+# DESCRIÇÃO: Lista de bibliotecas Python necessárias para o projeto.
+# ==============================================================================
 streamlit
-sqlalchemy
-mysql-connector-python
-pymysql
-python-dotenv
-cryptography
 pandas
+# SQLAlchemy é uma dependência do st.connection para SQL
+SQLAlchemy
+# Driver específico para a conexão com o banco de dados MySQL
+mysqlclient
+# Biblioteca para hashing seguro de senhas
+bcrypt
+# Bibliotecas para criação de gráficos interativos
+plotly
+altair
+# Biblioteca para operações numéricas, usada no simulador
+numpy

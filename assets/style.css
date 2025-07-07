@@ -1,0 +1,26 @@
+/* Remove o espaçamento extra criado pelo Streamlit no topo da página */
+div[data-testid="stAppViewContainer"] {
+    margin-top: -5rem;
+}
+
+/* Customiza os botões dentro de formulários para maior destaque */
+div[data-testid="stForm"] button {
+    background-color: #2a6fdb;
+    color: white;
+    font-weight: bold;
+    border-radius: 0.5rem;
+    border: none;
+}
+
+div[data-testid="stForm"] button:hover {
+    background-color: #1e5abc;
+}
+
+/* Adiciona uma borda sutil e sombra aos cartões de métrica para melhor definição */
+div[data-testid="stMetric"] {
+    border: 1px solid #e0e0e0;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    background-color: #ffffff;
+}

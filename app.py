@@ -1,116 +1,104 @@
 import streamlit as st
-from modules import pessoas, jogadores, equipes, jogos, estatisticas, consultas
-from database.connection import get_db
-from database.models import Pessoa 
+from utils.auth_utils import check_login
+from utils.ui_utils import page_header
 
-st.set_page_config(page_title="CBF Manager", page_icon="./assets/CBF.png")
+# Importa as funções que renderizam cada página
+from pages import (
+    p1_visao_geral,
+    p2_estatisticas,
+    p3_simulador,
+    p91_admin_equipes,
+    p92_admin_jogadores,
+    p93_admin_jogos,
+    p94_admin_estatisticas,
+    p99_admin_usuarios
+)
 
+# Configuração da página
+st.set_page_config(
+    page_title="CBFManager Pro",
+    page_icon="⚽",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-session_generator = get_db()
-session = next(session_generator) 
+# Inicializa o estado da sessão para controle de login
+def init_session_state():
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+    if 'user_role' not in st.session_state:
+        st.session_state.user_role = None
+    if 'username' not in st.session_state:
+        st.session_state.username = ''
 
-if "logado" not in st.session_state:
-    st.session_state.logado = False
-if "pessoa" not in st.session_state:
-    st.session_state.pessoa = None
+init_session_state()
 
-if not st.session_state.logado:
-    st.title("🔐 Login - CBF Manager")
+# --- TELA DE LOGIN ---
+def show_login_screen():
+    page_header("CBFManager Pro - Bem-vindo!", icon="🔐")
 
-    login = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        with st.form("login_form"):
+            login = st.text_input("Usuário", placeholder="Digite seu login")
+            password = st.text_input("Senha", type="password", placeholder="Digite sua senha")
+            submitted = st.form_submit_button("Entrar")
 
-    if st.button("Entrar"):
-        with st.spinner("Verificando credenciais..."):
-            
-            pessoa = session.query(Pessoa).filter_by(login=login, senha=senha).first()
-        if pessoa:
-            st.success(f"✅ Bem-vindo, {pessoa.login}!") 
-            st.session_state.logado = True
-            st.session_state.pessoa = {"login": pessoa.login, "tipo": pessoa.tipo} 
-            st.rerun()
-        else:
-            st.error("🚫 Login ou senha inválidos")
+            if submitted:
+                is_logged_in, user_role = check_login(login, password)
+                if is_logged_in:
+                    st.session_state.logged_in = True
+                    st.session_state.user_role = user_role
+                    st.session_state.username = login
+                    st.rerun()  # Recarrega a página para entrar no modo logado
+                else:
+                    st.error("Usuário ou senha inválidos.")
 
-else:
-    st.sidebar.success(
-        f"👤 Logado como: {st.session_state.pessoa['login']} ({st.session_state.pessoa['tipo']})"
-    )
+# --- LÓGICA DE NAVEGAÇÃO PÓS-LOGIN ---
+def show_main_app():
+    st.sidebar.image("https://images.vexels.com/media/users/3/264289/isolated/preview/6b0ad7127926868b44983a4563b78411-bola-de-futebol-chutando.png", width=100)
+    st.sidebar.title(f"Bem-vindo, {st.session_state.username}!")
+    st.sidebar.markdown(f"**Perfil:** `{st.session_state.user_role}`")
+    st.sidebar.markdown("---")
 
+    # Páginas disponíveis para todos os usuários
+    # O valor do dicionário é a função que renderiza a página
+    available_pages = {
+        "Visão Geral": p1_visao_geral.render,
+        "Estatísticas": p2_estatisticas.render,
+        "Simulador de Partidas": p3_simulador.render
+    }
+
+    # Adiciona páginas de admin se o usuário for 'Administrador'
+    if st.session_state.user_role == 'Administrador':
+        admin_pages = {
+            "Gerenciar Equipes": p91_admin_equipes.render,
+            "Gerenciar Jogadores": p92_admin_jogadores.render,
+            "Gerenciar Jogos": p93_admin_jogos.render,
+            "Registrar Estatísticas": p94_admin_estatisticas.render,
+            "Gerenciar Usuários": p99_admin_usuarios.render,
+        }
+        # Adiciona um separador visual no menu
+        st.sidebar.markdown("### Painel do Administrador")
+        available_pages.update(admin_pages)
+
+    # Cria o menu de navegação na barra lateral
+    selection = st.sidebar.radio("Navegar", list(available_pages.keys()))
+
+    # Chama a função da página selecionada para renderizá-la
+    page_function = available_pages[selection]
+    page_function()
+
+    # Botão de Logout no final da barra lateral
+    st.sidebar.markdown("---")
     if st.sidebar.button("Sair"):
-        st.session_state.logado = False
-        st.session_state.pessoa = None
+        for key in st.session_state.keys():
+            del st.session_state[key]
+        init_session_state()
         st.rerun()
 
-    st.title("⚽ CBF Manager")
-
-    if st.session_state.pessoa["tipo"] == "administrador":
-        page = st.sidebar.selectbox(
-            "📋 Menu do Administrador",
-            [
-                "Cadastrar Pessoa",
-                "Deletar Pessoa",
-                "Cadastrar Jogador",
-                "Deletar Jogador",
-                "Editar Jogador",
-                "Cadastrar Equipe",
-                "Deletar Equipe",
-                "Cadastrar Jogo",
-                "Deletar Jogo",
-                "Editar Jogo",
-                "Cadastrar Estatísticas",
-                "Deletar Estatísticas",
-                "Editar Estatisticas",
-                "Consulta SQL"
-            ],
-        )
-
-        if page == "Cadastrar Pessoa":
-            pessoas.cadastrar_pessoa(session) 
-        elif page == "Deletar Pessoa":
-            pessoas.deletar_pessoa(session)
-        elif page == "Cadastrar Jogador":
-            jogadores.cadastrar_jogador(session)
-        elif page == "Deletar Jogador":
-            jogadores.deletar_jogador(session)
-        elif page == "Cadastrar Equipe":
-            equipes.cadastrar_equipe(session)
-        elif page == "Deletar Equipe":
-            equipes.deletar_equipe(session)
-        elif page == "Cadastrar Jogo":
-            jogos.cadastrar_jogo(session)
-        elif page == "Deletar Jogo":
-            jogos.deletar_jogo(session)
-        elif page == "Cadastrar Estatísticas":
-            estatisticas.cadastrar_estatisticas(session)
-        elif page == "Deletar Estatísticas":
-            estatisticas.deletar_estatisticas(session)
-        elif page == "Consulta SQL":
-            consultas.consultar(session)
-        elif page == "Editar Jogador":
-            jogadores.editar_jogador(session)
-        elif page == "Editar Jogo":
-            jogos.editar_jogo(session)
-        elif page == "Editar Estatisticas":
-            estatisticas.editar_estatisticas(session)
-
-
-    elif st.session_state.pessoa["tipo"] == "usuario":
-        page = st.sidebar.selectbox(
-            "📋 Menu do Usuário",
-            [
-                "Visualizar Jogadores",
-                "Visualizar Equipes",
-                "Visualizar Jogos",
-                "Visualizar Estatísticas",
-            ],
-        )
-
-        if page == "Visualizar Jogadores":
-            jogadores.visualizar_jogador(session)
-        elif page == "Visualizar Equipes":
-            equipes.visualizar_equipe(session)
-        elif page == "Visualizar Jogos":
-            jogos.visualizar_jogo(session)
-        elif page == "Visualizar Estatísticas":
-            estatisticas.visualizar_estatisticas(session)
+# --- CONTROLE DE FLUXO PRINCIPAL ---
+if not st.session_state.logged_in:
+    show_login_screen()
+else:
+    show_main_app()
